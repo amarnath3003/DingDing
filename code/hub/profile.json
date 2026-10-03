@@ -1,0 +1,41 @@
+{
+  "_note": "Illustrative persona from docs/report.md §2.2. Replace with our real user's profile, written with them and their caregiver.",
+  "name": "Ravi",
+  "about": "54, retired school headmaster from Mysuru. ALS for four years. Cannot speak or move except one finger, which rings the bell. Mind fully intact.",
+  "people": [
+    {"name": "Lakshmi", "relation": "wife, primary caregiver"},
+    {"name": "Meena", "relation": "daughter, works in Bengaluru, visits at weekends"},
+    {"name": "Arjun", "relation": "grandson, 8"},
+    {"name": "Dr. Rao", "relation": "neurologist"},
+    {"name": "Visitor", "relation": "someone Ravi doesn't know well"}
+  ],
+  "default_present": ["Lakshmi"],
+  "languages": "English with doctors and visitors, Kannada at home, a Kannada-English mix with Arjun",
+  "loves": "cricket, old Kannada film songs, arguing about politics, terrible puns",
+  "style": "Dry humour, direct, a teacher's precision. Never childish, never over-polite. Calls Lakshmi 'Lakshmi', not 'dear'.",
+  "never_say": ["anything that sounds like a child", "medical claims he did not make"],
+  "routines": [
+    "Medicine at 9:00 and 21:00",
+    "Repositioning roughly every 2 hours",
+    "Likes the TV on for cricket in the evening",
+    "Sleeps around 22:30"
+  ],
+  "phrasebook": {
+    "needs": [
+      "I need water, please.",
+      "Please move me, I'm uncomfortable.",
+      "I'm in pain.",
+      "Can you adjust my pillow?",
+      "I need the toilet.",
+      "I need suction.",
+      "I'm too hot.",
+      "I'm cold, can I have a blanket?",
+      "Call Lakshmi, please."
+    ],
+    "quick": ["Yes", "No", "Wait, I want to say something.", "Thank you.", "Haha!", "Please say that again."],
+    "morning": ["Good morning. Did you sleep well?", "Can I have my tea?", "Read me the news headlines."],
+    "afternoon": ["Is there a match on today?", "Let's sit by the window.", "I'd like to rest for a while."],
+    "evening": ["What's the score?", "Did Meena call today?", "Time for my medicine."],
+    "night": ["I'm tired. I want to sleep.", "Goodnight. Thank you for today.", "Stay with me a little."]
+  }
+}

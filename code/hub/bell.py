@@ -1,0 +1,165 @@
+"""Bell input -> gestures: PRESS, HOLD, RAPID.
+
+Two sources feed the same gesture stream:
+  * Enter key in the Bell Screen: the browser sends raw down/up edges and
+    GestureClassifier turns them into gestures with the same thresholds as the
+    ESP32 firmware (bell_test/bell_test.ino).
+  * Real bell later: the firmware already classifies, so its serial lines
+    (PRESS / HOLD ... / REPEATED n presses ...) are parsed directly.
+
+Every gesture carries `ms_since_down`: how long ago the (first) contact was made.
+The scanner uses it to pick the option that was highlighted when the user
+actually reacted, not the one highlighted when the gesture finished.
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import re
+import time
+from typing import Awaitable, Callable, Optional
+
+from . import config
+
+log = logging.getLogger("bell")
+
+Emit = Callable[[dict], Awaitable[None]]
+
+
+def now_ms() -> float:
+    return time.monotonic() * 1000.0
+
+
+class GestureClassifier:
+    """Raw edges -> gestures. Mirrors onRelease()/flushBurst() in bell_test.ino."""
+
+    def __init__(self, emit: Emit):
+        self.emit = emit
+        self.closed = False
+        self.down_at = 0.0
+        self.burst_count = 0
+        self.burst_start = 0.0
+        self.last_release = 0.0
+        self._flush_task: Optional[asyncio.Task] = None
+        self._hold_task: Optional[asyncio.Task] = None
+
+    async def edge(self, down: bool) -> None:
+        t = now_ms()
+        if down and not self.closed:
+            self.closed = True
+            self.down_at = t
+            self._cancel(self._flush_task)  # a new press may extend the burst
+            self._hold_task = asyncio.ensure_future(self._announce_hold())
+            await self.emit({"type": "bell", "phase": "down"})
+        elif not down and self.closed:
+            self.closed = False
+            self._cancel(self._hold_task)
+            await self._on_release(t)
+
+    async def _announce_hold(self) -> None:
+        await asyncio.sleep(config.HOLD_MS / 1000)
+        if self.closed:
+            await self.emit({"type": "bell", "phase": "hold_started"})
+
+    async def _on_release(self, t: float) -> None:
+        dur = t - self.down_at
+        if dur < config.MIN_EVENT_MS:
+            self._schedule_flush()
+            return
+        if dur >= config.HOLD_MS:
+            await self._flush()
+            await self.emit(self._gesture("hold", self.down_at, duration_ms=round(dur)))
+            return
+        if self.burst_count > 0 and self.down_at - self.last_release > config.REPEAT_GAP_MS:
+            await self._flush()
+        if self.burst_count == 0:
+            self.burst_start = self.down_at
+        self.burst_count += 1
+        self.last_release = t
+        await self.emit({"type": "bell", "phase": "up", "count": self.burst_count})
+        self._schedule_flush()
+
+    def _schedule_flush(self) -> None:
+        self._cancel(self._flush_task)
+        if self.burst_count:
+            self._flush_task = asyncio.ensure_future(self._delayed_flush())
+
+    async def _delayed_flush(self) -> None:
+        await asyncio.sleep(config.REPEAT_GAP_MS / 1000)
+        if not self.closed:
+            await self._flush()
+
+    async def _flush(self) -> None:
+        n, self.burst_count = self.burst_count, 0
+        if n == 0:
+            return
+        if n >= config.RAPID_MIN_PRESSES:
+            await self.emit(self._gesture("rapid", self.burst_start, count=n))
+        else:
+            # A double tap counts as one deliberate press (spasm-safe).
+            await self.emit(self._gesture("press", self.burst_start, count=n))
+
+    @staticmethod
+    def _gesture(kind: str, started: float, **extra) -> dict:
+        return {"type": "bell", "phase": "gesture", "gesture": kind,
+                "ms_since_down": round(now_ms() - started), **extra}
+
+    @staticmethod
+    def _cancel(task: Optional[asyncio.Task]) -> None:
+        if task and not task.done():
+            task.cancel()
+
+
+# --- Real bell over USB serial (firmware does the classification) -------------
+
+_HOLD_RE = re.compile(r"^HOLD\s+duration=(\d+)")
+_REPEAT_RE = re.compile(r"^REPEATED\s+(\d+)\s+presses in\s+(\d+)")
+# Firmware prints PRESS only after the burst gap has passed, so the contact
+# started roughly (typical press ~170 ms) + gap ago.
+_FIRMWARE_PRESS_LAG_MS = 170 + config.REPEAT_GAP_MS
+
+
+def parse_firmware_line(line: str) -> Optional[dict]:
+    line = line.strip()
+    if line == "PRESS":
+        return {"type": "bell", "phase": "gesture", "gesture": "press", "count": 1,
+                "ms_since_down": _FIRMWARE_PRESS_LAG_MS}
+    if line.startswith("HOLD") and "started" in line:
+        return {"type": "bell", "phase": "hold_started"}
+    m = _HOLD_RE.match(line)
+    if m:
+        return {"type": "bell", "phase": "gesture", "gesture": "hold",
+                "duration_ms": int(m.group(1)), "ms_since_down": int(m.group(1)) + 30}
+    m = _REPEAT_RE.match(line)
+    if m:
+        n, span = int(m.group(1)), int(m.group(2))
+        kind = "rapid" if n >= config.RAPID_MIN_PRESSES else "press"
+        return {"type": "bell", "phase": "gesture", "gesture": kind, "count": n,
+                "ms_since_down": span + config.REPEAT_GAP_MS}
+    return None
+
+
+async def serial_reader(emit: Emit) -> None:
+    """Read bell_test.ino output from the ESP32. Runs only if BELL_SERIAL_PORT is set."""
+    if not config.BELL_SERIAL_PORT:
+        return
+    try:
+        import serial  # pyserial
+    except ImportError:
+        log.warning("BELL_SERIAL_PORT set but pyserial not installed; using Enter key only")
+        return
+    loop = asyncio.get_running_loop()
+    while True:
+        try:
+            port = serial.Serial(config.BELL_SERIAL_PORT, config.BELL_SERIAL_BAUD, timeout=0.2)
+            log.info("bell serial connected on %s", config.BELL_SERIAL_PORT)
+            while True:
+                raw = await loop.run_in_executor(None, port.readline)
+                if not raw:
+                    continue
+                event = parse_firmware_line(raw.decode(errors="ignore"))
+                if event:
+                    await emit(event)
+        except Exception as e:  # unplugged, permission, etc. -> retry
+            log.warning("bell serial: %s (retrying in 2 s)", e)
+            await asyncio.sleep(2)

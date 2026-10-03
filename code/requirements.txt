@@ -1,0 +1,10 @@
+# Never compile OpenCV/MediaPipe from source (on older macOS / Python 3.9 pip otherwise tries an hour-long build).
+--only-binary opencv-python,opencv-contrib-python,mediapipe,numpy
+fastapi
+uvicorn[standard]
+openai
+python-dotenv
+opencv-python
+mediapipe
+numpy
+pyserial

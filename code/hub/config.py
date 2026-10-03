@@ -34,7 +34,7 @@ HOLD_MS = int(_env("BELL_HOLD_MS", "1000"))          # contact this long = HOLD
 REPEAT_GAP_MS = int(_env("BELL_REPEAT_GAP_MS", "500"))  # next press within this gap = same burst
 MIN_EVENT_MS = int(_env("BELL_MIN_EVENT_MS", "30"))   # shorter contacts are bounce, ignored
 RAPID_MIN_PRESSES = int(_env("BELL_RAPID_MIN", "3"))  # burst of this many presses = RAPID (SOS)
-BELL_SERIAL_PORT = _env("BELL_SERIAL_PORT", "")       # e.g. /dev/cu.usbserial-0001; empty = Enter key only
+BELL_SERIAL_PORT = _env("BELL_SERIAL_PORT", "")       # "auto", or e.g. /dev/cu.usbserial-0001; empty = Enter key only
 BELL_SERIAL_BAUD = int(_env("BELL_SERIAL_BAUD", "115200"))
 
 # --- Voice out --------------------------------------------------------------

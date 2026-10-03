@@ -8,3 +8,6 @@ opencv-python
 mediapipe
 numpy
 pyserial
+# Flashing the bell ESP32 (bell_esp32/main.py)
+esptool
+mpremote

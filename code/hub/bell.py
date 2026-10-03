@@ -4,8 +4,9 @@ Two sources feed the same gesture stream:
   * Enter key in the Bell Screen: the browser sends raw down/up edges and
     GestureClassifier turns them into gestures with the same thresholds as the
     ESP32 firmware (bell_test/bell_test.ino).
-  * Real bell later: the firmware already classifies, so its serial lines
-    (PRESS / HOLD ... / REPEATED n presses ...) are parsed directly.
+  * ESP32 bell (bell_esp32/bell_esp32.ino): debounced DOWN / UP edges over USB
+    serial go through the same GestureClassifier. The older bell_test.ino output
+    (PRESS / HOLD ... / REPEATED n presses ...) is still parsed directly.
 
 Phases sent to the screen: down, up (with the tap count so far), hold_started,
 gesture, and burst_end (the burst finished without a further gesture). The screen
@@ -135,7 +136,7 @@ class GestureClassifier:
             task.cancel()
 
 
-# --- Real bell over USB serial (firmware does the classification) -------------
+# --- Real bell over USB serial ----------------------------------------------
 
 _HOLD_RE = re.compile(r"^HOLD\s+duration=(\d+)")
 _REPEAT_RE = re.compile(r"^REPEATED\s+(\d+)\s+presses in\s+(\d+)")
@@ -164,8 +165,30 @@ def parse_firmware_line(line: str) -> Optional[dict]:
     return None
 
 
-async def serial_reader(emit: Emit) -> None:
-    """Read bell_test.ino output from the ESP32. Runs only if BELL_SERIAL_PORT is set."""
+SERIAL_STATUS = {"port": None, "connected": False}  # shown in the sim panel
+
+_PORT_PATTERNS = ("/dev/cu.usbserial-*", "/dev/cu.SLAB_USBtoUART*", "/dev/cu.wchusbserial*",
+                  "/dev/cu.usbmodem*", "/dev/ttyUSB*", "/dev/ttyACM*")
+
+
+def _find_port() -> Optional[str]:
+    if config.BELL_SERIAL_PORT.lower() != "auto":
+        return config.BELL_SERIAL_PORT
+    import glob
+    for pattern in _PORT_PATTERNS:
+        found = sorted(glob.glob(pattern))
+        if found:
+            return found[0]
+    return None
+
+
+async def serial_reader(emit: Emit, edge: Callable[[bool], Awaitable[None]],
+                        on_status: Callable[[], Awaitable[None]]) -> None:
+    """Read the bell ESP32. Runs only if BELL_SERIAL_PORT is set ("auto" = first USB serial port).
+
+    bell_esp32.ino sends DOWN / UP edges, which go through the same GestureClassifier as the
+    Enter key. Lines from the older bell_test.ino (already classified) are still understood.
+    """
     if not config.BELL_SERIAL_PORT:
         return
     try:
@@ -174,17 +197,57 @@ async def serial_reader(emit: Emit) -> None:
         log.warning("BELL_SERIAL_PORT set but pyserial not installed; using Enter key only")
         return
     loop = asyncio.get_running_loop()
+    warned = None
     while True:
+        name = _find_port()
+        if not name:
+            if warned != "none":
+                log.warning("bell serial: no USB serial port found (waiting for the ESP32)")
+                warned = "none"
+            await asyncio.sleep(2)
+            continue
+        is_down = False
+        port = None
         try:
-            port = serial.Serial(config.BELL_SERIAL_PORT, config.BELL_SERIAL_BAUD, timeout=0.2)
-            log.info("bell serial connected on %s", config.BELL_SERIAL_PORT)
+            # Keep DTR/RTS low: on ESP32 DevKits they drive EN/IO0 (reset / bootloader).
+            # Opening the port may still reboot the board once; it's back in <1 s with READY.
+            port = serial.Serial(None, config.BELL_SERIAL_BAUD, timeout=0.2)
+            port.port, port.dtr, port.rts = name, False, False
+            port.open()
+            SERIAL_STATUS.update(port=name, connected=True)
+            warned = None
+            log.info("bell serial connected on %s", name)
+            await on_status()
             while True:
                 raw = await loop.run_in_executor(None, port.readline)
                 if not raw:
                     continue
-                event = parse_firmware_line(raw.decode(errors="ignore"))
-                if event:
-                    await emit(event)
-        except Exception as e:  # unplugged, permission, etc. -> retry
-            log.warning("bell serial: %s (retrying in 2 s)", e)
-            await asyncio.sleep(2)
+                line = raw.decode(errors="ignore").strip()
+                if line == "DOWN":
+                    is_down = True
+                    await edge(True)
+                elif line == "UP":
+                    is_down = False
+                    await edge(False)
+                elif line.startswith("READY"):
+                    log.info("bell ESP32 ready (%s)", line)
+                else:
+                    event = parse_firmware_line(line)
+                    if event:
+                        await emit(event)
+        except Exception as e:  # unplugged, permission, port busy (flashing), etc. -> retry
+            if warned != str(e):
+                log.warning("bell serial: %s (retrying every 2 s)", e)
+                warned = str(e)
+        finally:
+            if SERIAL_STATUS["connected"]:
+                SERIAL_STATUS.update(connected=False)
+                await on_status()
+            if port is not None:
+                try:
+                    port.close()
+                except Exception:
+                    pass
+            if is_down:  # unplugged mid-contact: don't leave the screen frozen
+                await edge(False)
+        await asyncio.sleep(2)

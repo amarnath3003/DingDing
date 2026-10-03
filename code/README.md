@@ -4,7 +4,7 @@ The core loop, runnable on one laptop:
 
 ```
 Enter key (bell) ─┐                         ┌─> Bell Screen (React): guesses, quick replies, room, Hawking keyboard
-ESP32 serial ─────┤                         ├─> voice (macOS `say`)
+ESP32 button ─────┤                         ├─> voice (macOS `say`)
 laptop camera ────┼──> hub (Python) <──LLM──┼─> devices: light, TV (mocked)
 health mock ──────┤      (OpenAI)           └─> alerts: check-in, Help, caregiver "coming"
 room mock + clock ┘
@@ -14,7 +14,7 @@ What's real and what's mocked in this iteration:
 
 | Part | Status |
 |---|---|
-| Bell | **Enter key**, with the same press/hold/rapid timings as `bell_test/bell_test.ino`. ESP32 serial input already supported (`BELL_SERIAL_PORT`). |
+| Bell | **Enter key** or a **push button on an ESP32** (`bell_esp32/`, `BELL_SERIAL_PORT=auto`), same press/hold/rapid timings as `bell_test/bell_test.ino`. |
 | Face | **Real**, from the laptop camera: MediaPipe Face Landmarker → rules → `neutral / happy / sad / uncomfortable / tired` + attention. Override from the sim panel. |
 | Health (HR, SpO₂, BP, RR, temp) | **Simulated**, with scenarios |
 | Room (temp, humidity, light, noise, CO₂) | **Simulated**, with scenarios. The clock is real but can be shifted. |
@@ -94,7 +94,7 @@ Rough cost while in use: decks ~$0.001 each, voice ~$0.015 per minute of speech,
 code/
   hub/                 Python, FastAPI + one WebSocket
     main.py            wiring, WebSocket protocol, deck/keyboard workers, safety (check-in → help)
-    bell.py            Enter-key edges → gestures; ESP32 serial line parser
+    bell.py            Enter-key + ESP32 button edges → gestures (one classifier)
     brain.py           OpenAI deck + keyboard calls (strict JSON schema), local fallback, word list
     chat.py            Ask AI: private chat turns (reply + pickable answers), local fallback from known facts
     face.py            camera → MediaPipe blendshapes → label + attention
@@ -159,7 +159,13 @@ HTTP: `POST /api/transcribe` (one WAV utterance; ignored unless `mic_on`), `GET 
 
 ## Swapping in the hardware later
 
-- **Bell ESP32:** flash `bell_test/bell_test.ino`, set `BELL_SERIAL_PORT=/dev/cu.usbserial-…`. The Enter key keeps working too.
+- **Bell button on an ESP32 DevKit:** momentary push button between **GPIO 4 (D4)** and **GND** (diagonal legs on a 4-leg tactile button; internal pull-up, no resistor). The on-board LED lights while it's pressed. The ESP32 runs MicroPython with `bell_esp32/main.py` (`bell_esp32.ino` is the same thing for Arduino) and only sends debounced `DOWN` / `UP` edges; the hub classifies them exactly like the Enter key, so freeze, hold line and SOS-on-third-tap all behave the same. `BELL_SERIAL_PORT=auto` finds the board; the sim panel shows whether it's connected; the Enter key keeps working too. Flashing (stop the hub first: it holds the port):
+  ```bash
+  P=/dev/cu.usbserial-0001   # once per board: MicroPython from micropython.org/download/ESP32_GENERIC
+  .venv/bin/python -m esptool --chip esp32 --port $P erase_flash
+  .venv/bin/python -m esptool --chip esp32 --port $P --baud 460800 write_flash -z 0x1000 ESP32_GENERIC-*.bin
+  .venv/bin/mpremote connect $P cp bell_esp32/main.py :main.py + reset   # after every change to main.py
+  ```
 - **ESP32-CAM:** `CAMERA_SOURCE=http://<cam-ip>:81/stream`.
 - **Light/TV ESP32:** implement `Devices._apply()` in `hub/devices.py`.
 - **Real sensors:** replace `HealthMock` / `EnvironmentMock` but keep their `snapshot()` shape.

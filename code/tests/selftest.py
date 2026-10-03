@@ -1,8 +1,11 @@
 """Quick offline checks (no camera, no network):  cd code && ../.venv/bin/python -m tests.selftest"""
 import asyncio
 import json
+import sys
+import types
 
 from hub import config
+from hub import bell as bell_mod
 from hub.bell import GestureClassifier, parse_firmware_line
 from hub.brain import Brain, local_keyboard
 
@@ -92,8 +95,59 @@ def other_cases():
     return cases
 
 
+async def serial_cases():
+    """bell_esp32.ino over a fake serial port: DOWN/UP edges reach the shared classifier."""
+    lines = [b"\r\n", b"READY level=1\r\n", b"DOWN\r\n", b"UP\r\n", b"DOWN\r\n"]
+
+    class FakeSerial:
+        def __init__(self, *a, **k):
+            self.port = self.dtr = self.rts = None
+            self.opened_with = None
+
+        def open(self):
+            self.opened_with = (self.dtr, self.rts)
+            fakes.append(self)
+
+        def readline(self):
+            if lines:
+                return lines.pop(0)
+            raise OSError("unplugged")
+
+        def close(self):
+            pass
+
+    fakes, edges, statuses = [], [], []
+    real_port, real_mod = config.BELL_SERIAL_PORT, sys.modules.get("serial")
+    sys.modules["serial"] = types.SimpleNamespace(Serial=FakeSerial)
+    config.BELL_SERIAL_PORT = "/dev/fake-esp32"
+
+    async def emit(e):
+        pass
+
+    async def edge(down):
+        edges.append(down)
+
+    async def on_status():
+        statuses.append(bell_mod.SERIAL_STATUS["connected"])
+
+    task = asyncio.ensure_future(bell_mod.serial_reader(emit, edge, on_status))
+    await asyncio.sleep(0.3)
+    task.cancel()
+    config.BELL_SERIAL_PORT = real_port
+    if real_mod is not None:
+        sys.modules["serial"] = real_mod
+    else:
+        sys.modules.pop("serial")
+    return [
+        ("serial DOWN/UP -> edges; unplugged mid-press releases", edges == [True, False, True, False], edges),
+        ("serial opened with DTR/RTS low (no ESP32 reset)", fakes and fakes[0].opened_with == (False, False),
+         fakes and fakes[0].opened_with),
+        ("serial status pushed on connect and disconnect", statuses == [True, False], statuses),
+    ]
+
+
 def main():
-    cases = asyncio.run(bell_cases()) + other_cases()
+    cases = asyncio.run(bell_cases()) + asyncio.run(serial_cases()) + other_cases()
     bad = 0
     for name, ok, detail in cases:
         print(("PASS " if ok else "FAIL ") + name + ("" if ok else f"   -> {detail}"))

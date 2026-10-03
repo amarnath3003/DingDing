@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config
 from . import chat
-from .bell import GestureClassifier, serial_reader
+from .bell import SERIAL_STATUS, GestureClassifier, serial_reader
 from .brain import Brain, kb_letters
 from .devices import Devices
 from .environment import SCENARIOS as ENV_SCENARIOS, EnvironmentMock
@@ -100,7 +100,7 @@ class Hub:
         self._log_file = open(config.LOG_DIR / f"events-{datetime.now():%Y%m%d}.jsonl", "a")
         self.face.start()
         self._tasks = [asyncio.ensure_future(c) for c in (
-            self._sensor_loop(), self._deck_worker(), serial_reader(self.on_bell))]
+            self._sensor_loop(), self._deck_worker(), serial_reader(self.on_bell, self.contact_edge, self._push_bell))]
         self.request_deck("startup")
         # One-time cost: fixed phrases are cached on disk and play instantly from then on.
         book = self.profile.get("phrasebook", {})
@@ -146,8 +146,7 @@ class Hub:
             "voices": OPENAI_VOICES,
             "undo_window_s": config.UNDO_WINDOW_S,
             "refine": self.refine,
-            "bell": {"hold_ms": config.HOLD_MS, "repeat_gap_ms": config.REPEAT_GAP_MS,
-                     "rapid_min": config.RAPID_MIN_PRESSES},
+            "bell": self._bell_state(),
             "tts_in_browser": not self.voice.available,
             "scenarios": {"health": list(HEALTH_SCENARIOS), "env": list(ENV_SCENARIOS), "face": list(FACE_LABELS)},
         }
@@ -164,6 +163,14 @@ class Hub:
 
     async def push(self, **partial) -> None:
         await self.send({"type": "state", "data": partial})
+
+    def _bell_state(self) -> dict:
+        return {"hold_ms": config.HOLD_MS, "repeat_gap_ms": config.REPEAT_GAP_MS,
+                "rapid_min": config.RAPID_MIN_PRESSES, "serial": dict(SERIAL_STATUS),
+                "serial_enabled": bool(config.BELL_SERIAL_PORT)}
+
+    async def _push_bell(self) -> None:
+        await self.push(bell=self._bell_state())
 
     def _transcript(self) -> list:
         """The conversation as the room had it: other people's lines and what the user said or did."""
@@ -330,6 +337,11 @@ class Hub:
             self.bell_screens.remove(ws)
         if ws is self.primary:
             await self.set_primary(self.bell_screens[-1] if self.bell_screens else None)
+
+    async def contact_edge(self, down: bool) -> None:
+        """Raw ESP32 contact edge: shown live on /contact.html, then classified like the Enter key."""
+        await self.send({"type": "contact", "down": down})
+        await self.bell.edge(down)
 
     async def on_bell(self, event: dict) -> None:
         if event.get("phase") == "gesture":

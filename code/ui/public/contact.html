@@ -1,0 +1,87 @@
+<!doctype html>
+<!-- Bell contact tester: raw DOWN / UP edges from the ESP32 (after its debounce), live.
+     Open http://127.0.0.1:8000/contact.html while the hub runs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bell contact</title>
+<style>
+  body { margin: 0; font: 18px/1.4 -apple-system, system-ui, sans-serif; background: #111; color: #eee; }
+  #lamp { height: 55vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+          background: #2a2a2a; transition: background 40ms; }
+  #lamp.on { background: #1fa64a; }
+  #state { font-size: 15vh; font-weight: 800; letter-spacing: .04em; }
+  #live { font-size: 4vh; opacity: .8; font-variant-numeric: tabular-nums; }
+  #bar { display: flex; gap: 2em; padding: .8em 1.2em; background: #1a1a1a; font-variant-numeric: tabular-nums; }
+  #bar b { color: #fff; }
+  #conn.bad { color: #ff6b6b; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td, th { padding: .3em 1.2em; text-align: left; border-bottom: 1px solid #222; }
+  th { color: #888; font-weight: 500; }
+  .press { color: #7fd1ff; } .hold { color: #ffd166; } .blip { color: #888; }
+  button { font: inherit; background: #333; color: #eee; border: 0; padding: .3em .9em; border-radius: 6px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="lamp"><div id="state">OPEN</div><div id="live">waiting for the bell…</div></div>
+<div id="bar">
+  <span id="conn" class="bad">hub: connecting…</span>
+  <span>ESP32: <b id="esp">?</b></span>
+  <span>contacts: <b id="count">0</b></span>
+  <button id="clear">Clear</button>
+</div>
+<table>
+  <thead><tr><th>#</th><th>time</th><th>gap before</th><th>contact length</th><th>reads as</th></tr></thead>
+  <tbody id="log"></tbody>
+</table>
+<script>
+  const $ = (id) => document.getElementById(id)
+  let downAt = null, lastUp = null, n = 0, holdMs = 1000, gapMs = 500
+  const kind = (ms) => ms < 30 ? 'blip' : ms >= holdMs ? 'hold' : 'press'
+
+  function tick() {
+    if (downAt !== null) $('live').textContent = `closed for ${Math.round(performance.now() - downAt)} ms`
+    requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+
+  function edge(down) {
+    const t = performance.now()
+    if (down && downAt === null) {
+      downAt = t
+      $('lamp').classList.add('on'); $('state').textContent = 'CONTACT'
+    } else if (!down && downAt !== null) {
+      const len = Math.round(t - downAt), gap = lastUp === null ? null : Math.round(downAt - lastUp)
+      const k = kind(len)
+      n += 1; $('count').textContent = n
+      const row = document.createElement('tr')
+      row.innerHTML = `<td>${n}</td><td>${new Date().toLocaleTimeString()}</td>` +
+        `<td>${gap === null ? '–' : gap + ' ms' + (gap <= gapMs ? ' (same burst)' : '')}</td>` +
+        `<td class="${k}"><b>${len} ms</b></td><td class="${k}">${k}</td>`
+      $('log').prepend(row)
+      downAt = null; lastUp = t
+      $('lamp').classList.remove('on'); $('state').textContent = 'OPEN'
+      $('live').textContent = `last contact ${len} ms (${k})`
+    }
+  }
+
+  $('clear').onclick = () => { $('log').innerHTML = ''; n = 0; $('count').textContent = 0; lastUp = null }
+
+  function connect() {
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`)
+    ws.onopen = () => { $('conn').textContent = 'hub: connected'; $('conn').className = '' }
+    ws.onclose = () => { $('conn').textContent = 'hub: reconnecting…'; $('conn').className = 'bad'; setTimeout(connect, 1000) }
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data)
+      if (msg.type === 'contact') edge(msg.down)
+      else if (msg.type === 'state' && msg.data.bell) {
+        const b = msg.data.bell
+        holdMs = b.hold_ms || holdMs; gapMs = b.repeat_gap_ms || gapMs
+        $('esp').textContent = b.serial?.connected ? `connected (${b.serial.port})` : b.serial_enabled ? 'not connected' : 'off (BELL_SERIAL_PORT empty)'
+      }
+    }
+  }
+  connect()
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="330" viewBox="0 0 900 330" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="900" height="330" rx="18" fill="#faf9f5" stroke="#e2dfd5"/>
+  <!-- ESP32 board -->
+  <rect x="60" y="60" width="230" height="210" rx="12" fill="#1f1e1c"/>
+  <rect x="140" y="250" width="70" height="34" rx="5" fill="#8a8a8a"/>
+  <text x="175" y="306" text-anchor="middle" font-size="14" fill="#5f5d56">USB → laptop (hub)</text>
+  <text x="175" y="110" text-anchor="middle" font-size="22" font-weight="700" fill="#faf9f5">ESP32</text>
+  <text x="175" y="134" text-anchor="middle" font-size="14" fill="#b9b5aa">DevKit · MicroPython</text>
+  <circle cx="105" cy="185" r="7" fill="#4ea3ff"/><text x="120" y="190" font-size="13" fill="#b9b5aa">LED (GPIO 2) = contact</text>
+  <circle cx="290" cy="105" r="8" fill="#e6b450"/><text x="270" y="110" text-anchor="end" font-size="15" font-weight="700" fill="#faf9f5">D4</text>
+  <circle cx="290" cy="215" r="8" fill="#e6b450"/><text x="270" y="220" text-anchor="end" font-size="15" font-weight="700" fill="#faf9f5">GND</text>
+  <!-- wires -->
+  <path d="M298 105 H560 V140" fill="none" stroke="#b9542f" stroke-width="5" stroke-linecap="round"/>
+  <path d="M298 215 H560 V190" fill="none" stroke="#1f1e1c" stroke-width="5" stroke-linecap="round"/>
+  <!-- switch -->
+  <circle cx="560" cy="145" r="7" fill="#faf9f5" stroke="#1f1e1c" stroke-width="3"/>
+  <circle cx="560" cy="185" r="7" fill="#faf9f5" stroke="#1f1e1c" stroke-width="3"/>
+  <path d="M560 152 L590 178" stroke="#1f1e1c" stroke-width="4" stroke-linecap="round"/>
+  <text x="610" y="160" font-size="18" font-weight="700" fill="#1f1e1c">Bell / push button</text>
+  <text x="610" y="184" font-size="14" fill="#5f5d56">momentary switch, no resistor</text>
+  <text x="610" y="204" font-size="14" fill="#5f5d56">(internal pull-up: contact = LOW)</text>
+  <!-- protocol -->
+  <rect x="610" y="236" width="230" height="40" rx="8" fill="#efede5"/>
+  <text x="725" y="262" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="15" fill="#1f1e1c">serial → DOWN · UP</text>
+  <text x="420" y="96" text-anchor="middle" font-size="13" fill="#b9542f">GPIO 4</text>
+</svg>

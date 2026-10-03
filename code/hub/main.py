@@ -35,6 +35,12 @@ from .tts import OPENAI_VOICES, Voice
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)-8s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("hub")
+
+
+def _log_crash(task: asyncio.Task) -> None:
+    """Background loops must never die silently."""
+    if not task.cancelled() and task.exception():
+        log.error("background task crashed", exc_info=task.exception())
 logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per API call is too noisy
 
 HEARD_TTL_S = 300        # utterances older than this drop out of context
@@ -101,6 +107,8 @@ class Hub:
         self.face.start()
         self._tasks = [asyncio.ensure_future(c) for c in (
             self._sensor_loop(), self._deck_worker(), serial_reader(self.on_bell, self.contact_edge, self._push_bell))]
+        for task in self._tasks:
+            task.add_done_callback(_log_crash)
         self.request_deck("startup")
         # One-time cost: fixed phrases are cached on disk and play instantly from then on.
         book = self.profile.get("phrasebook", {})
@@ -271,32 +279,42 @@ class Hub:
     async def _deck_worker(self) -> None:
         while True:
             try:
-                await asyncio.wait_for(self._deck_wakeup.wait(), timeout=config.DECK_REFRESH_S)
-            except asyncio.TimeoutError:
-                if self.ui_mode in ("idle", "chat") and self.alert["kind"] == "none":
-                    continue  # nobody is looking: don't pay for decks; refresh on wake instead
-                self._deck_reasons.add("periodic")
-            urgent = self._deck_reasons & {"heard", "other_ideas", "startup"}
-            if not urgent:
-                await asyncio.sleep(1.0)  # debounce bursts of small changes
-            self._deck_wakeup.clear()
-            reasons, self._deck_reasons = sorted(self._deck_reasons), set()
-            avoid, self._deck_avoid = self._deck_avoid, []
-            ctx = self.context()
-            await self.push(deck_status={"loading": True, "reasons": reasons})
-            t0 = time.monotonic()
-            deck = await self.brain.deck(ctx, avoid)
-            deck["reasons"] = reasons
-            deck["latency_ms"] = round((time.monotonic() - t0) * 1000)
-            self.deck = deck
-            self._last_deck_at = time.time()
-            self._deck_face_label = ctx["face"]["label"]
-            # Pre-generate the voice for the likeliest cards so a ring speaks instantly.
-            self.voice.prefetch((c["text"], c["tone"]) for c in deck["cards"][:config.TTS_PREFETCH]
-                                if c["kind"] in ("say", "say_and_do"))
-            self.log_event("deck", source=deck["source"], reasons=reasons, latency_ms=deck["latency_ms"],
-                           cards=[c["text"] for c in deck["cards"]])
-            await self.push(deck=deck, deck_status={"loading": False}, llm=self.brain.status)
+                await self._next_deck()
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # one bad deck must never stop guesses for the rest of the day
+                log.exception("deck worker")
+                await asyncio.sleep(1.0)
+
+    async def _next_deck(self) -> None:
+        """Wait for a reason to refresh, then build one deck and push it."""
+        try:
+            await asyncio.wait_for(self._deck_wakeup.wait(), timeout=config.DECK_REFRESH_S)
+        except asyncio.TimeoutError:
+            if self.ui_mode in ("idle", "chat") and self.alert["kind"] == "none":
+                return  # nobody is looking: don't pay for decks; refresh on wake instead
+            self._deck_reasons.add("periodic")
+        urgent = self._deck_reasons & {"heard", "other_ideas", "startup"}
+        if not urgent:
+            await asyncio.sleep(1.0)  # debounce bursts of small changes
+        self._deck_wakeup.clear()
+        reasons, self._deck_reasons = sorted(self._deck_reasons), set()
+        avoid, self._deck_avoid = self._deck_avoid, []
+        ctx = self.context()
+        await self.push(deck_status={"loading": True, "reasons": reasons})
+        t0 = time.monotonic()
+        deck = await self.brain.deck(ctx, avoid)
+        deck["reasons"] = reasons
+        deck["latency_ms"] = round((time.monotonic() - t0) * 1000)
+        self.deck = deck
+        self._last_deck_at = time.time()
+        self._deck_face_label = ctx["face"]["label"]
+        # Pre-generate the voice for the likeliest cards so a ring speaks instantly.
+        self.voice.prefetch((c["text"], c["tone"]) for c in deck["cards"][:config.TTS_PREFETCH]
+                            if c["kind"] in ("say", "say_and_do"))
+        self.log_event("deck", source=deck["source"], reasons=reasons, latency_ms=deck["latency_ms"],
+                       cards=[c["text"] for c in deck["cards"]])
+        await self.push(deck=deck, deck_status={"loading": False}, llm=self.brain.status)
 
     # --- keyboard predictions: local instantly, AI shortly after -----------------
     async def on_draft(self, draft: str, target: str = "say") -> None:

@@ -210,10 +210,17 @@ class Brain:
         avoid = avoid or []
         if avoid:
             ctx = {**ctx, "rejected": _dedupe((ctx.get("rejected") or []) + avoid)}
-        data = await self._ask(
-            [{"role": "system", "content": self.system},
-             {"role": "user", "content": "Context now:\n" + json.dumps(ctx, ensure_ascii=False)}],
-            DECK_SCHEMA, "deck", 700)
+        try:
+            # Hard deadline: the client timeout is per network step, so a flaky connection can
+            # otherwise stall a deck for minutes and the screen never gets new guesses.
+            data = await asyncio.wait_for(self._ask(
+                [{"role": "system", "content": self.system},
+                 {"role": "user", "content": "Context now:\n" + json.dumps(ctx, ensure_ascii=False)}],
+                DECK_SCHEMA, "deck", 700), config.LLM_TIMEOUT_S * 2 + 2)
+        except asyncio.TimeoutError:
+            self.status.update(last_error="deck timed out (using the phrasebook)")
+            log.warning("deck call timed out; using the phrasebook")
+            data = None
         if data and data.get("cards"):
             data["cards"] = _screen(data["cards"], ctx)
             if len(data["cards"]) < 4:  # top up from the phrasebook rather than show fewer options

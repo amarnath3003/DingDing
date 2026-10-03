@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420">
+  <defs>
+    <radialGradient id="glow" cx="78%" cy="50%" r="45%">
+      <stop offset="0" stop-color="#f6e5da"/>
+      <stop offset="1" stop-color="#faf9f5"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="420" fill="url(#glow)"/>
+  <rect x="0" y="0" width="1280" height="6" fill="#b9542f"/>
+
+  <!-- ding waves -->
+  <g fill="none" stroke="#b9542f" stroke-linecap="round" opacity=".9">
+    <path d="M880 150 q-28 -40 0 -80" stroke-width="5" opacity=".35"/>
+    <path d="M1120 150 q28 -40 0 -80" stroke-width="5" opacity=".35"/>
+    <path d="M850 170 q-50 -70 0 -140" stroke-width="5" opacity=".2"/>
+    <path d="M1150 170 q50 -70 0 -140" stroke-width="5" opacity=".2"/>
+  </g>
+  <!-- desk call bell (lucide concierge-bell, ISC) -->
+  <g transform="translate(880 90) scale(10)" fill="none" stroke="#b9542f" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 20a1 1 0 0 1-1-1v-1a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1Z"/>
+    <path d="M20 16a8 8 0 1 0-16 0"/>
+    <path d="M12 4v4"/>
+    <path d="M10 4h4"/>
+  </g>
+
+  <text x="80" y="150" font-family="'Source Serif 4', Georgia, 'Times New Roman', serif" font-size="96" font-weight="600" fill="#1f1e1c" letter-spacing="-2">Ding<tspan fill="#b9542f">.AI</tspan></text>
+  <text x="84" y="222" font-family="'Source Serif 4', Georgia, serif" font-size="38" fill="#1f1e1c">One bell press becomes a whole sentence.</text>
+  <text x="84" y="272" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" fill="#5f5d56">AI communication for people who are paralysed and can't speak,</text>
+  <text x="84" y="302" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" fill="#5f5d56">driven by a single switch: a desk call bell.</text>
+
+  <g font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="600">
+    <rect x="84" y="336" width="150" height="40" rx="20" fill="#b9542f"/>
+    <text x="159" y="362" text-anchor="middle" fill="#fff">PRESS · choose</text>
+    <rect x="248" y="336" width="160" height="40" rx="20" fill="#fff" stroke="#cfcbbf"/>
+    <text x="328" y="362" text-anchor="middle" fill="#1f1e1c">HOLD · confirm</text>
+    <rect x="422" y="336" width="178" height="40" rx="20" fill="#f7e1dd" stroke="#a3271f" stroke-opacity=".4"/>
+    <text x="511" y="362" text-anchor="middle" fill="#a3271f">3 TAPS · SOS</text>
+  </g>
+</svg>

@@ -146,8 +146,33 @@ async def serial_cases():
     ]
 
 
+async def hung_llm_cases():
+    """The AI call hangs (flaky Wi-Fi): the deck still arrives, from the phrasebook, on time."""
+    profile = json.loads(config.PROFILE_PATH.read_text())
+    brain = Brain(profile)
+    brain.client = object()  # pretend the LLM is configured
+
+    async def hang(*a, **k):
+        await asyncio.sleep(3600)
+
+    brain._ask = hang
+    real = config.LLM_TIMEOUT_S
+    config.LLM_TIMEOUT_S = 0.1
+    ctx = {"part_of_day": "evening", "devices": {"light": "off", "tv": "off"}, "room": {"light": 20, "room_temp": 27},
+           "health": {"overall": "normal"}, "face": {"label": "neutral"}}
+    t0 = asyncio.get_running_loop().time()
+    try:
+        d = await asyncio.wait_for(brain.deck(ctx, []), 5)
+    finally:
+        config.LLM_TIMEOUT_S = real
+    took = asyncio.get_running_loop().time() - t0
+    return [("hung LLM -> phrasebook deck within the deadline",
+             d["source"] == "local" and len(d["cards"]) >= 4 and took < 3, (d["source"], round(took, 2)))]
+
+
 def main():
-    cases = asyncio.run(bell_cases()) + asyncio.run(serial_cases()) + other_cases()
+    cases = (asyncio.run(bell_cases()) + asyncio.run(serial_cases()) + asyncio.run(hung_llm_cases())
+             + other_cases())
     bad = 0
     for name, ok, detail in cases:
         print(("PASS " if ok else "FAIL ") + name + ("" if ok else f"   -> {detail}"))

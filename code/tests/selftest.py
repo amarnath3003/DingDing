@@ -8,11 +8,13 @@ from hub.brain import Brain, local_keyboard
 
 
 async def bell_cases():
-    got = []
+    got, ends = [], []
 
     async def emit(e):
         if e.get("phase") == "gesture":
             got.append(e)
+        elif e.get("phase") == "burst_end":
+            ends.append(e)
 
     bell = GestureClassifier(emit)
 
@@ -31,16 +33,26 @@ async def bell_cases():
     await tap(150, 200); await tap(150); await asyncio.sleep(settle)
     cases.append(("double tap = press", got[-1]["gesture"] == "press" and got[-1]["count"] == 2, got[-1]))
 
-    await tap(100, 150); await tap(100, 150); await tap(100); await asyncio.sleep(settle)
-    cases.append(("3 taps = rapid", got[-1]["gesture"] == "rapid", got[-1]))
+    n = len(got)
+    await tap(100, 150); await tap(100, 150); await tap(100); await asyncio.sleep(0.05)
+    cases.append(("3rd tap fires rapid at once (no gap wait)", len(got) == n + 1 and got[-1]["gesture"] == "rapid", got[n:]))
+    await asyncio.sleep(settle)
+
+    n, e = len(got), len(ends)
+    for _ in range(5):
+        await tap(90, 140)
+    await asyncio.sleep(settle)
+    cases.append(("5 taps = one rapid, extra taps never a press", [g["gesture"] for g in got[n:]] == ["rapid"]
+                  and len(ends) == e + 1, [g["gesture"] for g in got[n:]]))
 
     n = len(got)
     await tap(config.HOLD_MS + 150); await asyncio.sleep(0.1)
     cases.append(("hold", len(got) == n + 1 and got[-1]["gesture"] == "hold", got[-1]))
 
     n = len(got)
+    e = len(ends)
     await tap(10); await asyncio.sleep(settle)
-    cases.append(("10 ms blip ignored", len(got) == n, None))
+    cases.append(("10 ms blip ignored (and ends the freeze)", len(got) == n and len(ends) == e + 1, None))
 
     press_ms = got[0]["ms_since_down"]
     cases.append(("press ms_since_down ~ press+gap", 600 <= press_ms <= 1100, press_ms))  # loose: real sleeps under CPU load
@@ -64,12 +76,12 @@ def other_cases():
     brain = Brain(profile)
     ctx = {"part_of_day": "evening", "devices": {"light": "off", "tv": "off"}, "room": {"light": 20, "room_temp": 27},
            "health": {"overall": "normal"}, "face": {"label": "tired"},
-           "heard": [{"speaker": "Lakshmi", "text": "Do you want tea or coffee?", "secs_ago": 2}]}
+           "waiting_for_answer": {"who": "Lakshmi", "text": "Do you want tea or coffee?", "secs_ago": 2}}
     d = brain._finish_deck(brain.local_deck(ctx, []), "local", ctx)
     texts = [c["text"] for c in d["cards"]]
     cases.append(("local deck answers choice question", d["situation"] == "reply_choice"
                   and texts[:2] == ["Tea, please.", "Coffee, please."] and len(texts) == 4, texts))
-    ctx["heard"] = []
+    ctx["waiting_for_answer"] = None
     d = brain._finish_deck(brain.local_deck(ctx, []), "local", ctx)
     cases.append(("local deck uses face + dark room", d["cards"][0]["text"].startswith("I'm tired")
                   and any(c["device"] == "light" for c in d["cards"]), [c["text"] for c in d["cards"]]))

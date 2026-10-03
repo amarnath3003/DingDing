@@ -86,7 +86,8 @@ class HealthMock:
         parts = []
         for k, v in snap.items():
             if v["status"] == "critical":
-                label = f"{names[k]} {v['value']}{v['unit']}"
+                unit = v["unit"] if v["unit"] in ("%", "°C") else " " + v["unit"]
+                label = f"{names[k]} {v['value']}{unit}"
                 if label not in parts and not (k == "bp_dia" and any("Blood pressure" in p for p in parts)):
                     parts.append(label)
         return ", ".join(parts)

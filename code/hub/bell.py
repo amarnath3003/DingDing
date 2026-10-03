@@ -7,6 +7,14 @@ Two sources feed the same gesture stream:
   * Real bell later: the firmware already classifies, so its serial lines
     (PRESS / HOLD ... / REPEATED n presses ...) are parsed directly.
 
+Phases sent to the screen: down, up (with the tap count so far), hold_started,
+gesture, and burst_end (the burst finished without a further gesture). The screen
+freezes the highlight from `down` until `gesture` or `burst_end`.
+
+RAPID fires on the third tap itself, not after the repeat gap, and any further taps
+in that burst are swallowed: they must never land as a press on whatever is
+highlighted next.
+
 Every gesture carries `ms_since_down`: how long ago the (first) contact was made.
 The scanner uses it to pick the option that was highlighted when the user
 actually reacted, not the one highlighted when the gesture finished.
@@ -40,6 +48,7 @@ class GestureClassifier:
         self.burst_count = 0
         self.burst_start = 0.0
         self.last_release = 0.0
+        self.fired = False  # this burst already became RAPID: swallow the rest of it
         self._flush_task: Optional[asyncio.Task] = None
         self._hold_task: Optional[asyncio.Task] = None
 
@@ -64,24 +73,35 @@ class GestureClassifier:
     async def _on_release(self, t: float) -> None:
         dur = t - self.down_at
         if dur < config.MIN_EVENT_MS:
-            self._schedule_flush()
+            if self.burst_count or self.fired:
+                self._schedule_flush()
+            else:
+                await self.emit({"type": "bell", "phase": "burst_end"})  # a bounce, not a press
             return
         if dur >= config.HOLD_MS:
             await self._flush()
             await self.emit(self._gesture("hold", self.down_at, duration_ms=round(dur)))
             return
-        if self.burst_count > 0 and self.down_at - self.last_release > config.REPEAT_GAP_MS:
+        if (self.burst_count > 0 or self.fired) and self.down_at - self.last_release > config.REPEAT_GAP_MS:
             await self._flush()
-        if self.burst_count == 0:
+        if self.burst_count == 0 and not self.fired:
             self.burst_start = self.down_at
-        self.burst_count += 1
         self.last_release = t
+        if self.fired:  # more taps after SOS: same emergency, not a press
+            self._schedule_flush()
+            return
+        self.burst_count += 1
         await self.emit({"type": "bell", "phase": "up", "count": self.burst_count})
+        if self.burst_count >= config.RAPID_MIN_PRESSES:
+            # SOS the moment the third tap lands: an emergency must not wait for the
+            # repeat gap, and the taps that follow must never turn into a press.
+            self.burst_count, self.fired = 0, True
+            await self.emit(self._gesture("rapid", self.burst_start, count=config.RAPID_MIN_PRESSES))
         self._schedule_flush()
 
     def _schedule_flush(self) -> None:
         self._cancel(self._flush_task)
-        if self.burst_count:
+        if self.burst_count or self.fired:
             self._flush_task = asyncio.ensure_future(self._delayed_flush())
 
     async def _delayed_flush(self) -> None:
@@ -91,7 +111,12 @@ class GestureClassifier:
 
     async def _flush(self) -> None:
         n, self.burst_count = self.burst_count, 0
+        if self.fired:
+            self.fired = False
+            await self.emit({"type": "bell", "phase": "burst_end"})
+            return
         if n == 0:
+            await self.emit({"type": "bell", "phase": "burst_end"})  # a bounce: nothing happened
             return
         if n >= config.RAPID_MIN_PRESSES:
             await self.emit(self._gesture("rapid", self.burst_start, count=n))

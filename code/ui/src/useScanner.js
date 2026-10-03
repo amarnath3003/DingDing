@@ -14,6 +14,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react'
 // contact was MADE, not when the gesture was recognised (a PRESS is only known
 // ~500 ms later, after the repeat gap). If the contact came within GRACE_MS of
 // the highlight moving, the user was reacting to the previous option.
+// peek(msSinceDown) returns that option without choosing it (a HOLD acts on it).
 const GRACE_MS = 250
 
 const samePath = (a, b) => a.length === b.length && a.every((x, i) => x === b[i])
@@ -45,9 +46,11 @@ export function useScanner({ root, dwellMs, active, paused, idleCycles = Infinit
     return nodes
   }, [])
 
-  const mark = useCallback(() => {
+  // jump: the highlight was moved by a choice or a reset, not by the scan clock. The grace
+  // window only covers clock moves: after a jump the old position may not even exist any more.
+  const mark = useCallback((jump = false) => {
     const st = s.current
-    st.history.push({ path: [...st.path], index: st.index, t: performance.now() })
+    st.history.push({ path: [...st.path], index: st.index, t: performance.now(), jump })
     if (st.history.length > 40) st.history.shift()
     bump()
   }, [])
@@ -57,7 +60,7 @@ export function useScanner({ root, dwellMs, active, paused, idleCycles = Infinit
     st.path = path
     st.index = nextUsable(nodesAt(path) || [], index)
     st.cycles = 0
-    mark()
+    mark(true)
   }, [mark, nodesAt])
 
   const closeGroup = useCallback(() => {
@@ -103,7 +106,7 @@ export function useScanner({ root, dwellMs, active, paused, idleCycles = Infinit
     const fixed = nextUsable(current, st0.index >= current.length ? 0 : st0.index)
     if (fixed !== st0.index) {
       st0.index = fixed
-      st0.history.push({ path: [...st0.path], index: fixed, t: performance.now() })
+      st0.history.push({ path: [...st0.path], index: fixed, t: performance.now(), jump: true })
     }
   }
 
@@ -130,22 +133,30 @@ export function useScanner({ root, dwellMs, active, paused, idleCycles = Infinit
     goto([], 0)
   }, [goto])
 
-  const press = useCallback((msSinceDown = 0) => {
+  // The option that was highlighted when the bell contact was made.
+  const resolve = useCallback((msSinceDown = 0) => {
     const st = s.current
     const tDown = performance.now() - msSinceDown
     const h = st.history
     let i = h.length - 1
     while (i > 0 && h[i].t > tDown) i--
     let pick = h[i] || { path: st.path, index: st.index, t: 0 }
-    if (i > 0 && tDown - pick.t < GRACE_MS && samePath(h[i - 1].path, pick.path)) pick = h[i - 1]
+    if (i > 0 && !pick.jump && tDown - pick.t < GRACE_MS && samePath(h[i - 1].path, pick.path)) pick = h[i - 1]
     let node = nodesAt(pick.path)?.[pick.index]
     let path = pick.path
     if (!node) {
       node = nodesAt(st.path)?.[st.index]
       path = st.path
     }
-    if (node && !node.skip) select(node, path)
-  }, [nodesAt, select])
+    return node && !node.skip ? { node, path } : null
+  }, [nodesAt])
+
+  const press = useCallback((msSinceDown = 0) => {
+    const hit = resolve(msSinceDown)
+    if (hit) select(hit.node, hit.path)
+  }, [resolve, select])
+
+  const peek = useCallback((msSinceDown = 0) => resolve(msSinceDown)?.node || null, [resolve])
 
   const back = useCallback(() => {
     if (s.current.path.length) closeGroup()
@@ -163,7 +174,9 @@ export function useScanner({ root, dwellMs, active, paused, idleCycles = Infinit
     dwellNow: dwellMs * (st.index === 0 ? 1.5 : 1),       // how long the current highlight stays
     highlightedId: active ? nodes[st.index]?.id : null,
     flashId: st.flash && performance.now() - st.flash.t < 600 ? st.flash.id : null,
+    highlighted: active ? nodes[st.index] || null : null,
     press,
+    peek,
     back,
     reset,
   }

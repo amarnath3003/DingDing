@@ -48,6 +48,9 @@ async def main():
         c = Client(ws)
         pump = asyncio.ensure_future(c.pump())
         await c.wait(lambda: "deck" in c.state, 5, "initial state")
+        await c.send(type="hello", role="bell")  # take control so bell gestures come to this test
+        await c.wait(lambda: any(e.get("type") == "role" and e.get("in_control") for e in c.events), 3, "in control")
+        ok("only the Bell Screen in control receives the bell")
         ok("connected, full state received", f"(deck source={c.state['deck']['source']})")
         await c.send(type="sim_health", scenario="normal")
         await c.send(type="alert_response", ok=True, source="test")
@@ -70,6 +73,24 @@ async def main():
         await c.send(type="select", card=card)
         await c.wait(lambda: c.state.get("last_said", {}).get("text") == card["text"], 3, "spoken")
         ok("card spoken", f"'{card['text']}'")
+
+        # HOLD on a card: "Close, but..." -> variations near it, never the card itself
+        held = deck["cards"][1]
+        await c.send(type="refine", card=held)
+        dt = await c.wait(lambda: c.state.get("refine", {}).get("for") == held["text"]
+                          and not c.state["refine"]["loading"], 20, "variations")
+        vs = [x["text"] for x in c.state["refine"]["cards"]]
+        assert held["text"] not in vs, vs
+        ok("hold on a card -> 'Close, but...' variations", f"in {dt}s for {held['text']!r}: {vs}")
+
+        # The whole deck scanned past twice -> those options are rejected and replaced
+        skipped = [x["text"] for x in c.state["deck"]["cards"]]
+        gen = c.state["deck"]["generated_at"]
+        await c.send(type="deck_skipped", cards=skipped)
+        await c.wait(lambda: c.state["deck"]["generated_at"] != gen, 20, "fresh deck")
+        fresh = [x["text"] for x in c.state["deck"]["cards"]]
+        assert not set(fresh) & set(skipped), (fresh, skipped)
+        ok("skipped deck -> fresh, different options", f"{fresh}")
 
         # Undo right after a choice: voice stops, hub confirms
         await c.send(type="say", text="Put the cricket on.", source="test")
@@ -118,6 +139,20 @@ async def main():
         ok("keyboard predictions", f"[{kb['source']}] words={kb['next_words']} letters={kb['next_letters']}")
         await c.send(type="kb_draft", draft="")
 
+        # Ask AI: greeting with pickable answers -> pick one -> reply with new answers; typed text works too
+        await c.send(type="chat_reset")
+        await c.wait(lambda: not c.state["chat"]["loading"] and len(c.state["chat"]["messages"]) == 1, 20, "chat greeting")
+        chat = c.state["chat"]
+        assert len(chat["options"]) >= 2, chat
+        ok("Ask AI greets with answers to pick", f"[{chat['source']}] {chat['messages'][0]['text']!r} {chat['options']}")
+        await c.send(type="chat_send", text=chat["options"][0], source="test")
+        await c.wait(lambda: not c.state["chat"]["loading"] and len(c.state["chat"]["messages"]) == 3, 20, "chat reply")
+        ok("picked answer -> AI reply", f"{c.state['chat']['messages'][-1]['text']!r} {c.state['chat']['options']}")
+        await c.send(type="chat_send", text="what time is it", source="test")
+        await c.wait(lambda: not c.state["chat"]["loading"] and len(c.state["chat"]["messages"]) == 5, 20, "typed chat reply")
+        ok("typed message -> AI reply", f"{c.state['chat']['messages'][-1]['text']!r}")
+        await c.send(type="chat_reset")
+
         # Critical vital -> check-in -> no answer -> automatic help
         await c.send(type="sim_health", scenario="tachycardia")
         dt = await c.wait(lambda: c.state["alert"]["kind"] == "checkin", 45, "check-in")
@@ -131,12 +166,17 @@ async def main():
         await c.send(type="alert_response", ok=True)
         await c.wait(lambda: c.state["alert"]["kind"] == "none", 3, "cleared")
 
-        # Rapid ring -> SOS
-        for _ in range(3):
+        # Rapid ring -> SOS on the third tap; a fourth tap must not become a press
+        n_press = sum(e.get("gesture") == "press" for e in c.events)
+        for i in range(4):
             await c.send(type="bell_edge", down=True); await asyncio.sleep(0.1)
-            await c.send(type="bell_edge", down=False); await asyncio.sleep(0.15)
-        await c.wait(lambda: c.state["alert"]["kind"] == "help", 3, "SOS help")
-        ok("rapid ring -> SOS Help", f"({c.state['alert']['reason']})")
+            await c.send(type="bell_edge", down=False)
+            if i == 2:
+                dt = await c.wait(lambda: c.state["alert"]["kind"] == "help", 3, "SOS help")
+            await asyncio.sleep(0.15)
+        await asyncio.sleep(0.8)
+        assert sum(e.get("gesture") == "press" for e in c.events) == n_press, "a tap of the SOS burst became a press"
+        ok("rapid ring -> SOS Help on the 3rd tap", f"({c.state['alert']['reason']}, {dt}s after the 3rd tap)")
         await c.send(type="alert_response", ok=True)
         await c.send(type="clear_heard")
         await c.wait(lambda: c.state["alert"]["kind"] == "none", 3, "cleared")

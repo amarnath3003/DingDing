@@ -20,7 +20,8 @@ What's real and what's mocked in this iteration:
 | Room (temp, humidity, light, noise, CO₂) | **Simulated**, with scenarios. The clock is real but can be shifted. |
 | Light + TV | **Simulated** on/off (`hub/devices.py::_apply` is where the 2nd ESP32 goes) |
 | Suggestions + keyboard prediction | **Real** OpenAI calls (`OPENAI_MODEL`, default `gpt-4.1-mini`), local phrasebook fallback |
-| Speech-to-text | Not yet. Type what people say in the sim panel. |
+| User's voice | **Real** OpenAI TTS (`gpt-4o-mini-tts`, cheapest), disk-cached and pre-fetched; local macOS voice fallback |
+| Hearing people | **Microphone toggle, OFF by default** (top bar on the Bell Screen, sim panel, or More › mic). When on: browser VAD → `gpt-4o-mini-transcribe` (cheapest). You can always type what people say in the sim panel instead. |
 | Learning from picks | Not yet (next iteration). Events are already logged to `code/logs/`. |
 
 ## Run
@@ -44,15 +45,33 @@ On macOS the first run asks for camera permission for your terminal app. If it's
 | Gesture | Enter key | Meaning |
 |---|---|---|
 | **Press** | tap (a double tap counts as one press) | choose the highlighted option; wakes the screen when idle |
-| **Hold** | hold ≥ 1 s | back: close the group → leave the keyboard → rest |
+| **Hold** | hold ≥ 1 s | back: close the group / leave the keyboard. On the main screen: **undo** the last choice (within 15 s: stops the voice, reverts the device, or says "Sorry, wrong one"), otherwise rest |
 | **Rapid** | ≥ 3 quick taps | SOS: Help alert straight away |
 
 - Options are highlighted one at a time (scan speed is set in the sim panel). A press picks the option that was highlighted **when the key went down**, plus a 250 ms grace window for late reactions. A press is only recognised ~0.5 s later, because a second tap might follow.
-- Main screen: 4 AI guesses → `Quick` · `Needs` · `Room` · `Keyboard` · `Other ideas` · `Rest` · `Help`.
+- Main loop, kept short because every second of scanning costs the user effort (~10 s per pass):
+  4 AI guesses → `Reactions` (only during a conversation) → `Other ideas` → `Keyboard` → `More` (Quick replies, Needs, Room, mic, Rest) → `Help`.
+  Help stays at the top level: a person with ALS may not manage three rapid taps.
+- A bar fills on the highlighted option so the user can time the ring. Opening a group replaces the cards so everything scanned is on screen.
+- What DING says appears in a large bubble for everyone in the room; device actions show a ✅ confirmation.
+- A card can only switch a device if its own words are about that device (the AI is never allowed to attach a hidden action).
 - New guesses never replace the ones being scanned. They appear at the start of the next cycle, except replies to something just said, or after `Other ideas`.
 - Keyboard rows: AI sentence completions (also expands initials like `i w t g o`) → next words → 6 likeliest letters → frequency grid → controls (`Speak` first). Picking a completion jumps straight to `Speak`.
-- Scanning pauses when the camera sees eyes closed or the face turned away for ~2 s, and slows down when the face looks `tired`.
+- Scanning pauses when the camera sees eyes closed or the face turned away for ~2 s (or while someone is talking, with the mic on), and slows down when the face looks `tired`. When someone speaks, the screen wakes with replies (unless the user chose Rest).
+- At night the screen dims.
 - If a vital stays critical for 5 s: "Are you OK?" (I'm OK / Get help). No answer within 20 s → automatic Help alert. "Caregiver: I'm coming" in the sim panel closes the loop out loud.
+
+## Voice: cost and latency
+
+OpenAI TTS takes 1-5 s per sentence, far too slow after a ring. So:
+- every clip is cached on disk (`hub/cache/tts/`); repeats are free and instant
+- quick replies, needs and the undo phrase are generated once at startup
+- the top `TTS_PREFETCH` (2) cards of every deck are generated as soon as the deck arrives
+- if a clip still isn't ready after `TTS_MAX_WAIT_S` (2.5 s), the local macOS voice speaks it immediately
+- DING's own alerts always use the local voice (instant, offline-safe, never sounds like the user)
+- no deck refreshes are paid for while the screen is idle
+
+Rough cost while in use: decks ~$0.001 each, voice ~$0.015 per minute of speech, transcription ~$0.003 per minute (mic on only).
 
 ## Layout
 
@@ -66,11 +85,13 @@ code/
     health.py          SIMULATED vitals + thresholds + scenarios
     environment.py     SIMULATED room sensors + clock
     devices.py         light / TV (mock backend)
-    tts.py             macOS `say` (user voice: Fred; DING's own announcements: Samantha)
+    tts.py             OpenAI TTS with cache + prefetch; macOS `say` fallback and system voice
+    stt.py             transcription (mic toggle), hallucination + self-echo filtering
     profile.json       who the user is (illustrative persona, replace with the real one)
   ui/                  React + Vite
     src/BellScreen.jsx user screen (main / keyboard / check-in / idle)
     src/useScanner.js  the scanning engine
+    src/useListener.js microphone voice-activity detection → WAV → hub (only when the toggle is on)
     src/SimPanel.jsx   operator & simulation panel
   logs/                events-YYYYMMDD.jsonl (bell, selections, decks, alerts)
 ```
@@ -91,6 +112,8 @@ One WebSocket at `/ws`, JSON both ways. Any UI can replace `ui/`; the hub doesn'
 `deck` = `{situation, reason, source: "ai"|"local", cards: [{id, text, kind: "say"|"do"|"say_and_do", device: "none"|"light"|"tv", device_on, p}], quick_reactions, reasons, latency_ms}`
 `keyboard` = `{draft, completions[], next_words[], next_letters[], source}`
 `alert` = `{kind: "none"|"checkin"|"help", reason, deadline?, source?, acknowledged_by?}`
+`speaking` = `{active, text, engine: "openai"|"say", at}` · `last_action` = `{text, expires}` (undo available) · `done` / `undone` = `{text, at}`
+Cards also carry `tone`: `neutral | warm | playful | firm | urgent | sad` (passed to the voice).
 
 **UI → hub**
 
@@ -105,9 +128,11 @@ One WebSocket at `/ws`, JSON both ways. Any UI can replace `ui/`; the hub doesn'
 | `help` | `reason?` | raise Help |
 | `alert_response` | `ok: bool` | answer the check-in / cancel Help |
 | `stop_speaking` | | |
-| sim only | `bell_sim{gesture}` `heard{speaker,text}` `clear_heard` `present{names}` `sim_health{scenario}` `sim_env{scenario}` `sim_time{hhmm}` `face_override{label}` `face_calibrate` `caregiver_ack{name}` `settings{scan_ms,pause_on_attention}` | |
+| `undo` | | undo the last choice (within `undo_window_s`) |
+| `settings` | `scan_ms`, `pause_on_attention`, `mic_on`, `tts_voice` | |
+| sim only | `bell_sim{gesture}` `heard{speaker,text}` `clear_heard` `present{names}` `sim_health{scenario}` `sim_env{scenario}` `sim_time{hhmm}` `face_override{label}` `face_calibrate` `caregiver_ack{name}` | |
 
-Debug: `GET /api/state`, `GET /api/context` (exactly what the LLM sees), `GET /camera.mjpg` (local preview).
+HTTP: `POST /api/transcribe` (one WAV utterance; ignored unless `mic_on`), `GET /api/state`, `GET /api/context` (exactly what the LLM sees), `GET /camera.mjpg` (local preview).
 
 ## Swapping in the hardware later
 

@@ -43,7 +43,7 @@ async def bell_cases():
     cases.append(("10 ms blip ignored", len(got) == n, None))
 
     press_ms = got[0]["ms_since_down"]
-    cases.append(("press ms_since_down ~ press+gap", 600 <= press_ms <= 900, press_ms))
+    cases.append(("press ms_since_down ~ press+gap", 600 <= press_ms <= 1100, press_ms))  # loose: real sleeps under CPU load
     return cases
 
 

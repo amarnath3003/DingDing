@@ -131,3 +131,67 @@ label.check input { margin-right: 6px; }
 .bar { display: flex; align-items: center; gap: 8px; }
 .bar span { width: 100px; color: var(--muted); }
 .bar i { height: 8px; background: var(--accent); border-radius: 4px; }
+
+/* ---------- iteration 2: flow + readability ---------- */
+.option, .tile, .kb-item, .kb-row { position: relative; overflow: hidden; }
+/* Dwell bar: shows how long until the highlight moves on, so the user can time the ring */
+.dwell { position: absolute; left: 0; bottom: 0; height: 6px; width: 100%; background: rgba(0,0,0,.35); transform-origin: left; animation: dwell linear forwards; pointer-events: none; }
+.kb-row .dwell { background: var(--hi); opacity: .7; height: 4px; }
+@keyframes dwell { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.kb-row.row-hi { border-color: var(--hi); }
+
+.card .text { flex: 1; }
+.option.card.cancel { background: #0f2a1a; border-color: var(--ok); }
+.tile .icon, .option .icon { font-size: 1.05em; }
+
+/* What DING is saying, big enough for everyone in the room to read */
+.bubble { margin: 12px 24px 0; padding: 14px 22px; border-radius: 16px; background: #1d2633; border: 2px solid #33445c; font-size: 30px; display: flex; align-items: center; gap: 16px; }
+.bubble.live { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(106,169,255,.15); }
+.bubble.undone { border-color: var(--warn); color: var(--warn); }
+.bubble-hint { margin-left: auto; font-size: 15px; color: var(--muted); white-space: nowrap; }
+
+.banner.heard { display: flex; gap: 14px; align-items: baseline; }
+.banner.heard .who { font-size: 18px; text-transform: uppercase; letter-spacing: .06em; }
+.banner.heard .said-text { font-size: 30px; }
+.banner.info { background: #2a2410; color: #ffe39a; font-size: 22px; }
+
+.stage { position: relative; }
+.pause-overlay { position: absolute; right: 24px; top: 12px; background: var(--warn); color: #111; font-weight: 800; font-size: 20px; padding: 6px 14px; border-radius: 999px; }
+
+.group-panel { display: block; }
+.crumbs { font-size: 15px; color: var(--accent); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+.group-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+
+.idle-time { font-size: 72px; font-weight: 800; color: var(--muted); }
+
+.countdown { height: 10px; background: #3a1416; border-radius: 6px; overflow: hidden; }
+.countdown i { display: block; height: 100%; background: var(--bad); transition: width .5s linear; }
+
+.mic-toggle { font: inherit; font-size: 17px; background: #222831; color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.mic-toggle.ok { color: var(--ok); border-color: #1f5a3a; }
+.mic-toggle.live { color: #fff; background: #5a1a1c; border-color: var(--bad); }
+.mic-toggle.muted { color: var(--muted); }
+.mic-toggle.bad { color: var(--warn); border-color: var(--warn); }
+.meter { display: inline-block; width: 40px; height: 6px; background: #2a2f37; border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--ok); }
+.hint { color: var(--muted); }
+
+/* Evenings: dimmer screen, same contrast */
+.screen.night { filter: brightness(.78); }
+
+/* Fit any laptop screen: sizes follow the window height */
+.screen { height: 100vh; overflow: hidden; }
+.stage { min-height: 0; gap: 1.2vh; padding: 1.4vh 24px; }
+.option { font-size: clamp(20px, 3.7vh, 34px); padding: 1.5vh 22px; }
+.option.small { font-size: clamp(18px, 3.2vh, 28px); padding: 1.3vh 18px; }
+.cards { gap: 1.1vh; }
+.tile { font-size: clamp(17px, 2.8vh, 24px); padding: 1.1vh 16px; }
+.bubble { font-size: clamp(20px, 3.4vh, 30px); padding: 1.2vh 22px; margin-top: 1vh; }
+.bubble.done { border-color: var(--ok); color: #bff5d4; }
+.banner { padding: 1.1vh 24px; }
+.banner.heard .said-text { font-size: clamp(20px, 3.4vh, 30px); }
+.ctx { font-size: clamp(13px, 2vh, 17px); padding: .9vh 20px; }
+.ctx-time { font-size: clamp(18px, 3vh, 26px); }
+.footer { min-height: 0; padding: .9vh 20px; font-size: clamp(14px, 2.2vh, 20px); }
+.card .tag { font-size: clamp(13px, 2vh, 17px); white-space: nowrap; }
+.group-panel { border: 2px solid var(--accent); border-radius: 14px; padding: 1.4vh 14px; }

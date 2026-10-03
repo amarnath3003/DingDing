@@ -1,7 +1,7 @@
 """DING hub: one process that owns every input and output.
 
 Inputs : bell (Enter key edges / ESP32 serial), camera face, SIMULATED vitals and
-         room sensors, things people say (typed in the sim panel for now).
+         room sensors, things people say (typed in the sim panel).
 Outputs: option decks + keyboard predictions (OpenAI, local fallback), voice,
          room devices, alerts.
 
@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, Set
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -28,10 +28,12 @@ from .devices import Devices
 from .environment import SCENARIOS as ENV_SCENARIOS, EnvironmentMock
 from .face import LABELS as FACE_LABELS, FaceSensor
 from .health import SCENARIOS as HEALTH_SCENARIOS, HealthMock
-from .tts import Voice
+from .stt import Transcriber
+from .tts import OPENAI_VOICES, Voice
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)-8s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("hub")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per API call is too noisy
 
 HEARD_TTL_S = 300        # utterances older than this drop out of context
 CHECKIN_SNOOZE_S = 120   # after "I'm OK", don't ask again for this long
@@ -44,7 +46,8 @@ class Hub:
         self.health = HealthMock()
         self.env = EnvironmentMock()
         self.devices = Devices()
-        self.voice = Voice()
+        self.voice = Voice(self.profile)
+        self.stt = Transcriber(self.profile)
         self.face = FaceSensor(self._face_from_thread)
         self.bell = GestureClassifier(self.on_bell)
         self.clients: Set[WebSocket] = set()
@@ -57,7 +60,13 @@ class Hub:
         self.alert = {"kind": "none"}
         self.checkin_snooze_until = 0.0
         self.critical_since: Optional[float] = None
-        self.settings = {"scan_ms": 1200, "pause_on_attention": True}
+        self.settings = {"scan_ms": 1200, "pause_on_attention": True, "tts_voice": self.voice.voice,
+                         "mic_on": config.MIC_DEFAULT_ON}
+        self.last_action: Optional[dict] = None
+        self.ui_mode = "idle"
+        self._last_deck_at = 0.0
+        book = self.profile.get("phrasebook", {})
+        self.undo_phrase = (book.get("undo") or ["Sorry, wrong one. Ignore that."])[0]
         self.speaking = {"active": False, "text": ""}
         self.deck = self.brain._finish_deck({"cards": []}, "local", {})
         self.kb = {"draft": "", **self.brain.local_keyboard(""), "source": "local"}
@@ -80,6 +89,9 @@ class Hub:
         self._tasks = [asyncio.ensure_future(c) for c in (
             self._sensor_loop(), self._deck_worker(), serial_reader(self.on_bell))]
         self.request_deck("startup")
+        # One-time cost: fixed phrases are cached on disk and play instantly from then on.
+        book = self.profile.get("phrasebook", {})
+        self.voice.prefetch((t, "neutral") for t in book.get("quick", []) + book.get("needs", []) + [self.undo_phrase])
         log.info("LLM: %s (%s)", config.OPENAI_MODEL if self.brain.client else "OFF", self.brain.status["last_error"] or "ready")
 
     async def stop(self) -> None:
@@ -90,9 +102,9 @@ class Hub:
         if self._log_file:
             self._log_file.close()
 
-    def log_event(self, event: str, **data) -> None:
+    def log_event(self, name: str, /, **data) -> None:
         if self._log_file:
-            self._log_file.write(json.dumps({"t": round(time.time(), 3), "event": event, **data}) + "\n")
+            self._log_file.write(json.dumps({"t": round(time.time(), 3), "event": name, **data}) + "\n")
             self._log_file.flush()
 
     # --- state out -------------------------------------------------------------
@@ -113,6 +125,11 @@ class Hub:
             "speaking": self.speaking,
             "llm": self.brain.status,
             "settings": self.settings,
+            "tts": self.voice.stats,
+            "stt": self.stt.stats,
+            "last_action": self._last_action_out(),
+            "voices": OPENAI_VOICES,
+            "undo_window_s": config.UNDO_WINDOW_S,
             "tts_in_browser": not self.voice.available,
             "scenarios": {"health": list(HEALTH_SCENARIOS), "env": list(ENV_SCENARIOS), "face": list(FACE_LABELS)},
         }
@@ -171,6 +188,8 @@ class Hub:
             try:
                 await asyncio.wait_for(self._deck_wakeup.wait(), timeout=config.DECK_REFRESH_S)
             except asyncio.TimeoutError:
+                if self.ui_mode == "idle" and self.alert["kind"] == "none":
+                    continue  # nobody is looking: don't pay for decks; refresh on wake instead
                 self._deck_reasons.add("periodic")
             urgent = self._deck_reasons & {"heard", "other_ideas", "startup"}
             if not urgent:
@@ -185,7 +204,11 @@ class Hub:
             deck["reasons"] = reasons
             deck["latency_ms"] = round((time.monotonic() - t0) * 1000)
             self.deck = deck
+            self._last_deck_at = time.time()
             self._deck_face_label = ctx["face"]["label"]
+            # Pre-generate the voice for the likeliest cards so a ring speaks instantly.
+            self.voice.prefetch((c["text"], c["tone"]) for c in deck["cards"][:config.TTS_PREFETCH]
+                                if c["kind"] in ("say", "say_and_do"))
             self.log_event("deck", source=deck["source"], reasons=reasons, latency_ms=deck["latency_ms"],
                            cards=[c["text"] for c in deck["cards"]])
             await self.push(deck=deck, deck_status={"loading": False}, llm=self.brain.status)
@@ -221,50 +244,104 @@ class Hub:
         await self.send(event)
 
     # --- output actions ----------------------------------------------------------
-    async def say(self, text: str, source: str) -> None:
+    async def say(self, text: str, source: str, tone: str = "neutral", undoable: bool = True,
+                  device_change: Optional[dict] = None) -> None:
+        """Speak in the user's voice. Never blocks the caller: bell input must not wait on TTS."""
         text = text.strip()
         if not text:
             return
-        self.recent.append({"text": text, "t": time.time()})
+        now = time.time()
+        self.recent.append({"text": text, "t": now})
         self.recent = self.recent[-20:]
-        self.log_event("say", text=text, source=source)
-        self.speaking = {"active": True, "text": text}
-        await self.push(speaking=self.speaking, last_said={"text": text, "at": time.time()})
+        self.log_event("say", text=text, source=source, tone=tone)
+        self.speaking = {"active": True, "text": text, "engine": None, "at": now}
+        if undoable:
+            self.last_action = {"text": text, "t": now, "device": device_change, "spoken": True}
+        await self.push(speaking=self.speaking, last_said={"text": text, "at": now},
+                        last_action=self._last_action_out())
         if not self.voice.available:
             await self.send({"type": "speak", "text": text})
-        await self.voice.speak(text)
-        asyncio.ensure_future(self._speech_done(text))
+        asyncio.ensure_future(self._speak(text, tone))
         self.request_deck("said")
 
-    async def _speech_done(self, text: str) -> None:
-        await self.voice.wait()
+    async def _speak(self, text: str, tone: str) -> None:
+        engine = await self.voice.speak(text, tone)
+        if engine == "superseded":
+            return
         if self.speaking.get("text") == text:
-            self.speaking = {"active": False, "text": text}
+            self.speaking = {**self.speaking, "engine": engine}
+            await self.push(speaking=self.speaking, tts=self.voice.stats)
+        await self.voice.wait()
+        if self.speaking.get("text") == text and not self.voice.playing():
+            self.speaking = {**self.speaking, "active": False}
             await self.push(speaking=self.speaking)
 
     async def announce(self, text: str) -> None:
-        """DING's own voice (alerts), shown on screen too."""
+        """DING's own voice (alerts): local, instant, offline-safe, shown on screen too."""
         await self.push(announcement={"text": text, "at": time.time()})
         if not self.voice.available:
             await self.send({"type": "speak", "text": text, "system": True})
-        await self.voice.speak(text, system=True)
+        asyncio.ensure_future(self.voice.speak(text, system=True))
 
     async def set_device(self, name: str, on: bool, source: str) -> None:
+        prev = self.devices.state.get(name)
         await self.devices.set(name, on)
         self.log_event("device", device=name, on=on, source=source)
-        await self.push(devices=self.devices.snapshot())
+        done = None
+        if source in ("scan", "card") and prev != on:
+            label = self.devices.snapshot()[name]["label"]
+            done = {"text": f"{label} turned {'on' if on else 'off'}", "at": time.time()}
+            self.last_action = {"text": done["text"], "t": time.time(),
+                                "device": {"name": name, "prev": prev}, "spoken": False}
+        await self.push(devices=self.devices.snapshot(), last_action=self._last_action_out(),
+                        **({"done": done} if done else {}))
         self.request_deck("device")
 
     async def select_card(self, card: dict) -> None:
         kind, device = card.get("kind", "say"), card.get("device", "none")
         self.log_event("select", text=card.get("text"), kind=kind, device=device,
                        deck_source=self.deck.get("source"), rank=card.get("rank"))
+        change = None
         if device in self.devices.state and kind in ("do", "say_and_do"):
+            change = {"name": device, "prev": self.devices.state[device]}
             await self.set_device(device, bool(card.get("device_on")), source="card")
         if kind in ("say", "say_and_do"):
-            await self.say(card["text"], source="card")
+            await self.say(card["text"], source="card", tone=card.get("tone", "neutral"), device_change=change)
         else:
             self.recent.append({"text": card["text"], "t": time.time()})
+
+    def _last_action_out(self) -> Optional[dict]:
+        a = self.last_action
+        if not a or time.time() - a["t"] > config.UNDO_WINDOW_S:
+            return None
+        return {"text": a["text"], "t": a["t"], "expires": a["t"] + config.UNDO_WINDOW_S}
+
+    async def undo(self) -> None:
+        """HOLD right after a wrong pick: stop the voice, revert the device, tell the room."""
+        a = self._last_action_out() and self.last_action
+        if not a:
+            return
+        self.last_action = None
+        was_speaking = self.voice.playing() and self.speaking.get("text") == a["text"]
+        await self.voice.stop()
+        if a.get("device"):
+            d = a["device"]
+            await self.devices.set(d["name"], bool(d["prev"]))
+            await self.push(devices=self.devices.snapshot())
+        self.log_event("undo", text=a["text"], interrupted=was_speaking)
+        self.speaking = {"active": False, "text": "", "engine": None}
+        await self.push(speaking=self.speaking, last_action=None, undone={"text": a["text"], "at": time.time()})
+        if a.get("spoken") and not was_speaking:
+            # Already said out loud: tell the listener to disregard it.
+            await self.say(self.undo_phrase, source="undo", undoable=False)
+
+    async def on_heard(self, text: str, speaker: Optional[str], source: str) -> None:
+        if not speaker:  # from the microphone we don't know who; guess when only one person is here
+            speaker = self.present[0] if len(self.present) == 1 else "Someone"
+        self.heard.append({"speaker": speaker, "text": text, "t": time.time(), "source": source})
+        self.log_event("heard", speaker=speaker, text=text, source=source)
+        await self.push(heard=self._heard_out())
+        self.request_deck("heard")
 
     # --- safety: health check-in and help ---------------------------------------
     async def raise_help(self, reason: str, source: str) -> None:
@@ -367,10 +444,9 @@ class Hub:
         elif t == "heard":
             text = msg.get("text", "").strip()
             if text:
-                self.heard.append({"speaker": msg.get("speaker") or "Someone", "text": text, "t": time.time()})
-                self.log_event("heard", speaker=msg.get("speaker"), text=text)
-                await self.push(heard=self._heard_out())
-                self.request_deck("heard")
+                await self.on_heard(text, msg.get("speaker"), source="typed")
+        elif t == "undo":
+            await self.undo()
         elif t == "clear_heard":
             self.heard = []
             await self.push(heard=[])
@@ -396,10 +472,17 @@ class Hub:
         elif t == "face_calibrate":
             self.face.calibrate(float(msg.get("seconds", 3)))
         elif t == "settings":
-            self.settings.update({k: v for k, v in msg.items() if k in ("scan_ms", "pause_on_attention")})
-            await self.push(settings=self.settings)
+            self.settings.update({k: v for k, v in msg.items()
+                                  if k in ("scan_ms", "pause_on_attention", "tts_voice", "mic_on")})
+            self.voice.set_voice(self.settings["tts_voice"])
+            self.log_event("settings", **{k: v for k, v in msg.items() if k != "type"})
+            await self.push(settings=self.settings, tts=self.voice.stats)
         elif t == "ui_event":  # scanner telemetry (view changes, pauses) for later metrics
-            self.log_event("ui", **{k: v for k, v in msg.items() if k != "type"})
+            self.log_event("ui", **{("ui_" + k if k == "event" else k): v for k, v in msg.items() if k != "type"})
+            if msg.get("event") == "mode":
+                was, self.ui_mode = self.ui_mode, msg.get("mode", "main")
+                if was == "idle" and self.ui_mode != "idle" and time.time() - self._last_deck_at > 60:
+                    self.request_deck("wake")
         else:
             log.warning("unknown message %r", t)
 
@@ -432,7 +515,7 @@ async def ws_endpoint(ws: WebSocket):
             except Exception as e:  # a bad message must never kill the connection
                 log.exception("handling %s", msg.get("type"))
                 await ws.send_json({"type": "error", "message": f"{msg.get('type')}: {e}"})
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, RuntimeError):  # RuntimeError: client vanished mid-receive
         pass
     finally:
         hub.clients.discard(ws)
@@ -441,6 +524,23 @@ async def ws_endpoint(ws: WebSocket):
 @app.get("/api/state")
 async def api_state():
     return JSONResponse(hub.full_state())
+
+
+@app.post("/api/transcribe")
+async def api_transcribe(request: Request):
+    """One utterance (WAV) from the Bell Screen microphone -> text -> 'heard'."""
+    audio = await request.body()
+    if not hub.settings.get("mic_on"):
+        return JSONResponse({"text": None, "ignored": "mic off"})
+    if hub.voice.playing():
+        return JSONResponse({"text": None, "ignored": "DING was speaking"})
+    await hub.push(stt_status={"busy": True})
+    recent = [r["text"] for r in hub.recent if time.time() - r["t"] < 20]
+    text = await hub.stt.transcribe(audio, recent)
+    await hub.push(stt_status={"busy": False}, stt=hub.stt.stats)
+    if text:
+        await hub.on_heard(text, None, source="mic")
+    return JSONResponse({"text": text})
 
 
 @app.get("/api/context")

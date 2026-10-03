@@ -7,3 +7,4 @@ code/hub/models/
 __pycache__/
 *.pyc
 .DS_Store
+code/hub/cache/

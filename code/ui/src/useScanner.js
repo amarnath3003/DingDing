@@ -159,6 +159,8 @@ export function useScanner({ root, dwellMs, active, paused, idleCycles = Infinit
   return {
     path: st.path,
     index: st.index,
+    tick: version,                                        // changes on every highlight move
+    dwellNow: dwellMs * (st.index === 0 ? 1.5 : 1),       // how long the current highlight stays
     highlightedId: active ? nodes[st.index]?.id : null,
     flashId: st.flash && performance.now() - st.flash.t < 600 ? st.flash.id : null,
     press,

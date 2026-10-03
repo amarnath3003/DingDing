@@ -54,7 +54,7 @@ async def main():
 
         # Someone asks a question -> reply deck
         await c.send(type="heard", speaker="Lakshmi", text="Do you want tea or coffee?")
-        dt = await c.wait(lambda: "heard" in c.state["deck"].get("reasons", []), 15, "reply deck")
+        dt = await c.wait(lambda: c.state["deck"].get("for_heard") == "Do you want tea or coffee?", 20, "reply deck")
         deck = c.state["deck"]
         ok("reply deck after a question", f"in {dt}s [{deck['source']}/{deck['situation']}] {[x['text'] for x in deck['cards']]}")
 
@@ -71,7 +71,39 @@ async def main():
         await c.wait(lambda: c.state.get("last_said", {}).get("text") == card["text"], 3, "spoken")
         ok("card spoken", f"'{card['text']}'")
 
+        # Undo right after a choice: voice stops, hub confirms
+        await c.send(type="say", text="Put the cricket on.", source="test")
+        await c.wait(lambda: (c.state.get("last_action") or {}).get("text") == "Put the cricket on.", 3, "undo offered")
+        await c.send(type="undo")
+        await c.wait(lambda: (c.state.get("undone") or {}).get("text") == "Put the cricket on.", 3, "undone")
+        ok("hold-to-undo after a wrong choice")
+        await c.send(type="stop_speaking")
+        await asyncio.sleep(1.5)
+
+        # Microphone: OFF by default -> hub refuses audio; transcription itself works (tested directly,
+        # so we don't switch on the mic of a Bell Screen someone has open)
+        import subprocess, urllib.request
+        from hub import config
+        from hub.stt import Transcriber
+        assert c.state["settings"]["mic_on"] is False, "mic should default to off"
+        subprocess.run(["say", "-v", "Samantha", "-o", "/tmp/ding-q.wav", "--data-format=LEI16@16000",
+                        "Ravi, would you like some tea?"], check=True)
+        wav = open("/tmp/ding-q.wav", "rb").read()
+        req = urllib.request.Request("http://127.0.0.1:8000/api/transcribe", data=wav, headers={"Content-Type": "audio/wav"})
+        r = json.load(urllib.request.urlopen(req, timeout=30))
+        assert r.get("ignored") == "mic off", r
+        ok("mic off by default: audio refused")
+        t0 = time.time()
+        text = await Transcriber(json.loads(config.PROFILE_PATH.read_text())).transcribe(wav, [])
+        assert text and "tea" in text.lower(), f"transcript was {text!r}"
+        ok("speech -> transcript", f"in {time.time() - t0:.1f}s: {text!r}")
+        echo = await Transcriber(json.loads(config.PROFILE_PATH.read_text())).transcribe(wav, ["Ravi, would you like some tea?"])
+        assert echo is None
+        ok("DING's own voice is dropped as echo")
+
         # Room control
+        await c.send(type="device", device="light", on=False)  # known starting point
+        await c.wait(lambda: c.state["env"]["sensors"]["light"]["value"] < 120, 10, "room dark")
         before = c.state["env"]["sensors"]["light"]["value"]
         await c.send(type="device", device="light", on=True)
         await c.wait(lambda: c.state["devices"]["light"]["on"], 3, "light on")

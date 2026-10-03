@@ -144,6 +144,32 @@ export default function SimPanel({ hub }) {
         </section>
 
         <section>
+          <h2>Voice & microphone</h2>
+          <label>User's voice ({state.tts?.engine === 'openai' ? state.tts.model : 'macOS say'}):{' '}
+            <select value={settings?.tts_voice} onChange={(e) => send({ type: 'settings', tts_voice: e.target.value })}>
+              {(state.voices || []).map((v) => <option key={v}>{v}</option>)}
+            </select>
+          </label>
+          <div className="btns">
+            <button className="ghost" onClick={() => send({ type: 'say', text: 'Hello, this is my voice.', source: 'sim' })}>test voice</button>
+          </div>
+          <p className="muted">
+            last clip {state.tts?.last_ms ?? '–'} ms · cached clips {state.tts?.cached} · local fallbacks {state.tts?.fallbacks}
+            {state.tts?.last_engine && ` · last played: ${state.tts.last_engine}`}
+            {state.tts?.last_error && <span className="err"> · {state.tts.last_error}</span>}
+          </p>
+          <h3>Microphone (people talking to the user)</h3>
+          <label className="check">
+            <input type="checkbox" checked={!!settings?.mic_on} onChange={(e) => send({ type: 'settings', mic_on: e.target.checked })} />
+            Mic on: the Bell Screen listens and transcribes ({state.stt?.model})
+          </label>
+          <p className="muted">
+            last transcript {state.stt?.last_ms ?? '–'} ms: “{state.stt?.last_text || '–'}” · dropped as noise/echo {state.stt?.dropped}
+            {state.stt?.last_error && <span className="err"> · {state.stt.last_error}</span>}
+          </p>
+        </section>
+
+        <section>
           <h2>Alerts</h2>
           <p>Current: <b>{alert?.kind}</b> {alert?.reason && `(${alert.reason})`} {alert?.acknowledged_by && `· ${alert.acknowledged_by} coming`}</p>
           <div className="btns">

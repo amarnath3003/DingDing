@@ -1,0 +1,28 @@
+1.843 �Bell contact test ready. Strike / hold / tap repeatedly.
+17.669 contact #1  707 ms
+18.139 PRESS
+22.452 contact #1  92 ms
+22.923 PRESS
+25.548 contact #1  113 ms
+26.018 PRESS
+28.500 contact #1  95 ms
+29.532 HOLD      started (still held...)
+31.621 PRESS
+31.624 HOLD      duraion=3063 ms
+31.698 (ignored 17 ms blip)
+36.782 contact #1  30 ms
+36.827 (ignored 7 ms blip)
+38.219 HOLD      started (still held...)
+40.958 PRESS
+40.961 HOLD      duration=3713 ms
+43.355 contact #1  139 ms
+43.826 PRESS
+45.649 contact #1  36 ms
+45.821 contact #2  38 ms
+45.889 contact #3  38 ms
+46.423 contact #4  326 ms
+46.702 contact #5  179 ms
+47.737 HOLD      started (still held...)
+48.261 REPEATED  5 presses in 1089 ms
+48.266 HOLD      duration=1499 ms
+49.306 HOLD      started (still held...)

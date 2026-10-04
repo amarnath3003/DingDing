@@ -218,7 +218,7 @@
         </button>
       </div>
     </div>
-    <p class="persona-note">Ravi, Lakshmi, Meena, Arjun and Dr. Rao are an illustrative persona, not real people. In the real app the guesses come from gpt-5-mini; here they are scripted so the demo works offline.</p>
+    <p class="persona-note">Ravi, Lakshmi, Meena, Arjun and Dr. Rao are an illustrative persona, not real people. In the real app the guesses come from an AI model; here they are scripted so the demo works offline.</p>
   </section>
 
   <!-- ============================== The gap ============================== -->
@@ -242,67 +242,83 @@
 
   <!-- ============================== The room ============================== -->
   <section class="room" aria-labelledby="room-h">
-    <figure class="room-art" aria-label="A bedside scene. Ravi rests in bed with his hand by a desk bell on the tray table. A laptop on the tray shows four sentences with one highlighted, and speaks it: Tea, please. Less sugar than usual. Lakshmi stands nearby holding a cup of tea.">
+    <figure class="room-art" aria-label="Ravi sits in his wheelchair and presses a desk bell on its lap tray. A laptop on the side table shows four sentences with one highlighted, and speaks it: Tea, please. Less sugar than usual. Lakshmi stands nearby holding a cup of tea.">
       <svg viewBox="0 0 1000 540" aria-hidden="true">
         <!-- wall and floor -->
         <rect x="0" y="0" width="1000" height="476" class="wall" />
         <rect x="0" y="476" width="1000" height="64" class="floor" />
         <line x1="0" y1="476" x2="1000" y2="476" class="hair" />
         <!-- window -->
-        <rect x="70" y="60" width="200" height="190" rx="10" class="window" />
-        <circle cx="200" cy="130" r="30" class="sky-body" />
-        <line x1="170" y1="60" x2="170" y2="250" class="frame" />
-        <line x1="70" y1="155" x2="270" y2="155" class="frame" />
-        <rect x="70" y="60" width="200" height="190" rx="10" class="frame-out" />
-        <!-- bed -->
-        <rect x="100" y="250" width="26" height="236" rx="8" class="bed-wood" />
-        <rect x="114" y="380" width="560" height="52" rx="16" class="mattress" />
-        <rect x="114" y="428" width="560" height="22" rx="6" class="bed-wood" />
-        <rect x="652" y="380" width="22" height="106" rx="6" class="bed-wood" />
-        <!-- raised pillow -->
-        <path d="M130 384 C126 330 150 296 196 290 L244 300 C214 330 206 360 210 384 Z" class="pillow" />
-        <!-- person: head, shoulders, blanket -->
-        <circle cx="222" cy="300" r="34" class="skin" />
-        <path d="M236 270 C214 258 188 266 190 292 C202 276 220 272 236 278 Z" class="hair-fill" />
-        <path d="M190 384 C186 350 204 330 242 330 L300 334 C324 336 336 352 336 384 Z" class="shirt" />
-        <path d="M268 384 C272 360 300 350 340 350 L630 352 C650 352 660 366 658 384 Z" class="blanket" />
-        <path d="M360 356 C380 372 430 372 452 358" class="fold" />
-        <path d="M500 356 C520 370 566 370 586 356" class="fold" />
-        <!-- arm resting toward the bell -->
-        <path d="M290 340 C320 344 350 334 384 324" class="arm" />
-        <circle cx="390" cy="322" r="9" class="skin" />
-        <!-- over-bed tray table -->
-        <rect x="352" y="330" width="290" height="12" rx="6" class="tray" />
-        <rect x="610" y="342" width="12" height="134" class="tray" />
-        <rect x="580" y="472" width="80" height="10" rx="5" class="tray" />
-        <!-- bell on tray -->
-        <rect x="380" y="318" width="52" height="12" rx="4" class="bell-base" />
-        <path d="M384 320 A22 22 0 0 1 428 320 Z" class="bell-dome" />
-        <rect x="403" y="290" width="6" height="10" rx="1.5" class="bell-ink" />
-        <rect x="396" y="286" width="20" height="6" rx="3" class="bell-ink" />
-        <g class="small-waves" fill="none" stroke-linecap="round">
-          <path d="M386 292 q-8 -10 0 -20" /><path d="M426 292 q8 -10 0 -20" />
+        <rect x="60" y="50" width="160" height="156" rx="10" class="window" />
+        <circle cx="172" cy="104" r="24" class="sky-body" />
+        <line x1="140" y1="50" x2="140" y2="206" class="frame" />
+        <line x1="60" y1="128" x2="220" y2="128" class="frame" />
+        <rect x="60" y="50" width="160" height="156" rx="10" class="frame-out" />
+        <ellipse cx="330" cy="477" rx="190" ry="7" class="floor-shadow" />
+        <!-- wheelchair: backrest and seat -->
+        <path d="M206 236 L232 236 L244 352 L222 352 Z" class="wc-up" />
+        <!-- Ravi, seated -->
+        <path d="M232 352 C224 306 224 272 240 256 C254 242 290 240 304 254 C318 270 326 312 328 352 Z" class="shirt" />
+        <circle cx="274" cy="214" r="30" class="skin" />
+        <path d="M246 216 C242 188 266 178 290 183 C300 186 305 193 304 199 C290 191 266 195 252 222 Z" class="hair-fill" />
+        <rect x="224" y="346" width="188" height="20" rx="8" class="wc-up" />
+        <path d="M246 322 C300 314 370 314 404 322 C414 334 414 352 406 362 L250 362 C242 352 242 334 246 322 Z" class="blanket" />
+        <path d="M300 330 C318 342 352 342 372 330" class="fold" />
+        <path d="M400 350 L434 426" class="legs" />
+        <rect x="428" y="422" width="46" height="16" rx="8" class="shoe" />
+        <!-- wheelchair: frame, footrest, wheels -->
+        <path d="M206 228 L222 366 L412 366 L428 422" class="wc-frame" />
+        <path d="M206 228 L182 222" class="wc-frame" />
+        <path d="M428 422 L432 458" class="wc-frame" />
+        <path d="M410 370 L450 436" class="wc-frame" />
+        <path d="M436 442 L484 442" class="wc-frame foot" />
+        <circle cx="432" cy="460" r="14" class="wc-tire caster" />
+        <circle cx="432" cy="460" r="3" class="wc-hub" />
+        <g class="wc-spoke">
+          <line x1="322" y1="404" x2="202" y2="404" /><line x1="314" y1="434" x2="210" y2="374" /><line x1="292" y1="456" x2="232" y2="352" />
+          <line x1="262" y1="464" x2="262" y2="344" /><line x1="232" y1="456" x2="292" y2="352" /><line x1="210" y1="434" x2="314" y2="374" />
         </g>
-        <!-- laptop -->
-        <path d="M462 330 L622 330 L630 318 L456 318 Z" class="lap-base" />
-        <rect x="470" y="206" width="146" height="108" rx="8" class="lap-screen" />
-        <rect x="480" y="216" width="126" height="88" rx="4" class="lap-glass" />
-        <rect x="488" y="226" width="70" height="6" rx="3" class="lap-line" />
-        <rect x="486" y="240" width="114" height="16" rx="5" class="lap-hi" />
-        <rect x="492" y="246" width="78" height="5" rx="2.5" class="lap-hi-line" />
-        <rect x="486" y="252" width="56" height="3" rx="1.5" class="lap-dwell" />
-        <rect x="492" y="266" width="92" height="5" rx="2.5" class="lap-line" />
-        <rect x="492" y="280" width="62" height="5" rx="2.5" class="lap-line" />
-        <rect x="492" y="294" width="84" height="5" rx="2.5" class="lap-line" />
+        <circle cx="262" cy="404" r="66" class="wc-tire" />
+        <circle cx="262" cy="404" r="54" class="wc-rim" />
+        <circle cx="262" cy="404" r="8" class="wc-hub" />
+        <!-- armrest and lap tray -->
+        <rect x="250" y="306" width="124" height="10" rx="5" class="wc-up" />
+        <path d="M362 316 L362 346" class="wc-frame" />
+        <rect x="262" y="296" width="222" height="10" rx="5" class="tray" />
+        <!-- the bell on the tray, under his finger -->
+        <rect x="412" y="286" width="48" height="10" rx="3" class="bell-base" />
+        <path d="M416 288 A20 20 0 0 1 456 288 Z" class="bell-dome" />
+        <rect x="433" y="262" width="6" height="8" rx="1.5" class="bell-ink" />
+        <rect x="426" y="258" width="20" height="6" rx="3" class="bell-ink" />
+        <path d="M290 262 C300 286 308 296 322 296 C352 296 392 276 422 254" class="arm" />
+        <circle cx="434" cy="248" r="10" class="skin" />
+        <g class="small-waves" fill="none" stroke-linecap="round">
+          <path d="M412 268 q-9 -11 0 -22" /><path d="M464 268 q9 -11 0 -22" />
+          <path d="M398 276 q-15 -19 0 -38" class="far" /><path d="M478 276 q15 -19 0 -38" class="far" />
+        </g>
+        <!-- side table and laptop -->
+        <rect x="510" y="330" width="150" height="10" rx="5" class="tray" />
+        <rect x="580" y="340" width="10" height="136" class="tray" />
+        <rect x="550" y="472" width="70" height="8" rx="4" class="tray" />
+        <path d="M518 330 L652 330 L658 320 L512 320 Z" class="lap-base" />
+        <rect x="522" y="214" width="130" height="102" rx="8" class="lap-screen" />
+        <rect x="531" y="223" width="112" height="84" rx="4" class="lap-glass" />
+        <rect x="538" y="232" width="62" height="6" rx="3" class="lap-line" />
+        <rect x="536" y="245" width="102" height="16" rx="5" class="lap-hi" />
+        <rect x="542" y="251" width="70" height="5" rx="2.5" class="lap-hi-line" />
+        <rect x="536" y="257" width="50" height="3" rx="1.5" class="lap-dwell" />
+        <rect x="542" y="270" width="82" height="5" rx="2.5" class="lap-line" />
+        <rect x="542" y="283" width="56" height="5" rx="2.5" class="lap-line" />
+        <rect x="542" y="296" width="74" height="5" rx="2.5" class="lap-line" />
         <!-- voice -->
         <g class="voice-waves" fill="none" stroke-linecap="round">
-          <path d="M630 236 q10 12 0 24" /><path d="M644 226 q18 22 0 44" />
+          <path d="M664 236 q10 12 0 24" /><path d="M678 226 q18 22 0 44" />
         </g>
         <!-- speech bubble -->
         <g class="bubble-g">
-          <rect x="540" y="86" width="412" height="66" rx="22" class="say-bubble" />
-          <path d="M610 150 L596 178 L640 152 Z" class="say-bubble" />
-          <text x="746" y="128" text-anchor="middle" class="say-text">Tea, please. Less sugar than usual.</text>
+          <rect x="470" y="92" width="412" height="66" rx="22" class="say-bubble" />
+          <path d="M572 156 L560 186 L604 158 Z" class="say-bubble" />
+          <text x="676" y="134" text-anchor="middle" class="say-text">Tea, please. Less sugar than usual.</text>
         </g>
         <!-- Lakshmi -->
         <circle cx="820" cy="236" r="30" class="skin2" />
@@ -397,7 +413,7 @@
           <path d="M0 315 C110 315 110 210 220 210" /><path d="M0 385 C110 385 110 210 220 210" />
         </g>
       </svg>
-      <div class="hub-node" aria-hidden="true"><svg class="ic" width="34" height="34"><use href="#i-bell"/></svg><span>gpt-5-mini</span></div>
+      <div class="hub-node" aria-hidden="true"><svg class="ic" width="34" height="34"><use href="#i-bell"/></svg><span>AI model</span></div>
       <svg class="funnel out" viewBox="0 0 160 420" preserveAspectRatio="none" aria-hidden="true">
         <g fill="none" class="strands">
           <path d="M0 210 C80 210 80 60 160 60" /><path d="M0 210 C80 210 80 160 160 160" />
@@ -581,7 +597,7 @@
           <tr><td>Help after three taps</td><td>on the third tap</td></tr>
         </tbody>
       </table>
-      <p class="fine">An evaluation of 10 realistic moments picked the model: gpt-5-nano repeated questions and missed distress, while gpt-5-mini answered in the user’s voice at the same speed.</p>
+      <p class="fine">An evaluation of 10 realistic moments picked the AI model: a smaller model repeated questions and missed distress, while the one we chose answered in the user’s voice at the same speed.</p>
     </div>
     <div class="facts-col">
       <h2>What’s real and what’s simulated.</h2>

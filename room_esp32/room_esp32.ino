@@ -28,9 +28,10 @@
 // WI-FI
 // ==========================================
 
-const char* WIFI_SSID = "YOUR_WIFI";
-const char* WIFI_PASS = "YOUR_PASSWORD";
-const char* HOSTNAME  = "ding-room";  // -> http://ding-room.local
+const char* WIFI_SSID = "Amarnath\u2019s iPhone";  // the iPhone's name, curly apostrophe and all
+const char* WIFI_PASS = "123456789";
+const char* HOSTNAME  = "ding-room";               // -> http://ding-room.local
+const unsigned long WIFI_RETRY_MS = 15000;          // the hotspot may come up after the board
 
 // ==========================================
 // PINS + TIMING
@@ -58,6 +59,7 @@ int sos = 0;                // 0 off, 1 help needed, 2 help is coming
 bool heardFromHub = false;  // until then the screen shows READY + the address
 bool wifiUp = false;
 bool mdnsStarted = false;
+unsigned long lastWifiKick = 0;
 
 unsigned long lastBlink = 0;
 bool blinkState = false;
@@ -181,6 +183,11 @@ void handleRoot() {
 
 void checkWifi() {
   bool up = WiFi.status() == WL_CONNECTED;
+  if (!up && millis() - lastWifiKick > WIFI_RETRY_MS) {
+    lastWifiKick = millis();
+    WiFi.disconnect();
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+  }
   if (up == wifiUp) return;
   wifiUp = up;
   redraw = true;
@@ -252,6 +259,7 @@ void setup() {
   WiFi.setSleep(false);  // modem sleep adds 100+ ms to every command
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
+  lastWifiKick = millis();
 
   server.on("/", handleRoot);
   server.on("/state", handleState);

@@ -56,10 +56,11 @@ export default function SimPanel({ hub }) {
       <div className="ops-grid">
         <section className="panel">
           <h2><ConciergeBell size={20} /> Bell and scanning</h2>
-          <p><span className={`dot ${bell?.serial?.connected ? 'ok' : 'bad'}`} />{' '}
-            {bell?.serial?.connected ? `ESP32 button on ${bell.serial.port}`
-              : bell?.serial_enabled ? 'ESP32 button not connected (Enter key still works)'
-              : 'ESP32 button off: set BELL_SERIAL_PORT=auto (Enter key only)'}</p>
+          <p><span className={`dot ${bell?.wifi?.connected || bell?.serial?.connected ? 'ok' : 'bad'}`} />{' '}
+            {bell?.wifi?.connected ? `ESP32 button over Wi-Fi at ${bell.wifi.host}`
+              : bell?.serial?.connected ? `ESP32 button on ${bell.serial.port}`
+              : bell?.wifi_enabled || bell?.serial_enabled ? 'ESP32 button not connected (Enter key still works)'
+              : 'ESP32 button off: set BELL_WIFI_HOST or BELL_SERIAL_PORT=auto (Enter key only)'}</p>
           <div className="btns">
             <button className="btn" onClick={() => send({ type: 'bell_sim', gesture: 'press' })}>Press</button>
             <button className="btn" onClick={() => send({ type: 'bell_sim', gesture: 'hold' })}>Hold</button>

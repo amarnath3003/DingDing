@@ -4,9 +4,9 @@ Two sources feed the same gesture stream:
   * Enter key in the Bell Screen: the browser sends raw down/up edges and
     GestureClassifier turns them into gestures with the same thresholds as the
     ESP32 firmware (bell_test/bell_test.ino).
-  * ESP32 bell (bell_esp32/bell_esp32.ino): debounced DOWN / UP edges over USB
-    serial go through the same GestureClassifier. The older bell_test.ino output
-    (PRESS / HOLD ... / REPEATED n presses ...) is still parsed directly.
+  * ESP32 bell (bell_esp32/bell_esp32.ino): debounced DOWN / UP edges over Wi-Fi
+    or USB serial go through the same GestureClassifier. The older bell_test.ino
+    output (PRESS / HOLD ... / REPEATED n presses ...) is still parsed directly.
 
 Phases sent to the screen: down, up (with the tap count so far), hold_started,
 gesture, and burst_end (the burst finished without a further gesture). The screen
@@ -165,6 +165,20 @@ def parse_firmware_line(line: str) -> Optional[dict]:
     return None
 
 
+async def _bell_line(line: str, emit: Emit, edge: Callable[[bool], Awaitable[None]]) -> Optional[bool]:
+    """One line from the bell board. Returns the contact state for DOWN / UP, else None."""
+    if line in ("DOWN", "UP"):
+        await edge(line == "DOWN")
+        return line == "DOWN"
+    if line.startswith("READY"):
+        log.info("bell ESP32 ready (%s)", line)
+    else:
+        event = parse_firmware_line(line)
+        if event:
+            await emit(event)
+    return None
+
+
 SERIAL_STATUS = {"port": None, "connected": False}  # shown in the sim panel
 
 _PORT_PATTERNS = ("/dev/cu.usbserial-*", "/dev/cu.SLAB_USBtoUART*", "/dev/cu.wchusbserial*",
@@ -223,18 +237,11 @@ async def serial_reader(emit: Emit, edge: Callable[[bool], Awaitable[None]],
                 if not raw:
                     continue
                 line = raw.decode(errors="ignore").strip()
-                if line == "DOWN":
-                    is_down = True
-                    await edge(True)
-                elif line == "UP":
-                    is_down = False
-                    await edge(False)
-                elif line.startswith("READY"):
-                    log.info("bell ESP32 ready (%s)", line)
-                else:
-                    event = parse_firmware_line(line)
-                    if event:
-                        await emit(event)
+                if WIFI_STATUS["connected"] and line in ("DOWN", "UP"):
+                    continue  # Wi-Fi carries the edges: a second, later copy would double the taps
+                down = await _bell_line(line, emit, edge)
+                if down is not None:
+                    is_down = down
         except Exception as e:  # unplugged, permission, port busy (flashing), etc. -> retry
             if warned != str(e):
                 log.warning("bell serial: %s (retrying every 2 s)", e)
@@ -249,5 +256,62 @@ async def serial_reader(emit: Emit, edge: Callable[[bool], Awaitable[None]],
                 except Exception:
                     pass
             if is_down:  # unplugged mid-contact: don't leave the screen frozen
+                await edge(False)
+        await asyncio.sleep(2)
+
+
+# --- Real bell over Wi-Fi ---------------------------------------------------
+
+WIFI_STATUS = {"host": None, "connected": False}  # shown in the sim panel
+_WIFI_SILENCE_S = 3.0  # the board sends PING every second; this long with nothing = dead link
+
+
+async def wifi_reader(emit: Emit, edge: Callable[[bool], Awaitable[None]],
+                      on_status: Callable[[], Awaitable[None]]) -> None:
+    """Read the bell ESP32 over Wi-Fi. Runs only if BELL_WIFI_HOST is set.
+
+    bell_esp32.ino listens on BELL_WIFI_PORT and sends the same lines as over USB, plus PING.
+    While this link is up, serial_reader drops its DOWN / UP so a bell on both never double-taps.
+    """
+    if not config.BELL_WIFI_HOST:
+        return
+    host, port = config.BELL_WIFI_HOST, config.BELL_WIFI_PORT
+    WIFI_STATUS["host"] = f"{host}:{port}"
+    warned = None
+    while True:
+        is_down = False
+        writer = None
+        try:
+            try:
+                reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), 5)
+            except asyncio.TimeoutError:
+                raise ConnectionError(f"no answer from {host}:{port}") from None
+            WIFI_STATUS["connected"] = True
+            warned = None
+            log.info("bell Wi-Fi connected to %s:%s", host, port)
+            await on_status()
+            while True:
+                try:
+                    raw = await asyncio.wait_for(reader.readline(), _WIFI_SILENCE_S)
+                except asyncio.TimeoutError:
+                    raise ConnectionError(f"bell silent for {_WIFI_SILENCE_S:g} s") from None
+                if not raw:
+                    raise ConnectionError("bell closed the connection")
+                line = raw.decode(errors="ignore").strip()
+                if line != "PING":
+                    down = await _bell_line(line, emit, edge)
+                    if down is not None:
+                        is_down = down
+        except Exception as e:  # board off, out of range, hotspot down, etc. -> retry
+            if warned != str(e):
+                log.warning("bell Wi-Fi: %s (retrying every 2 s)", e)
+                warned = str(e)
+        finally:
+            if WIFI_STATUS["connected"]:
+                WIFI_STATUS.update(connected=False)
+                await on_status()
+            if writer is not None:
+                writer.close()
+            if is_down:  # link lost mid-contact: don't leave the screen frozen
                 await edge(False)
         await asyncio.sleep(2)

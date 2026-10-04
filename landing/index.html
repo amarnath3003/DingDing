@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ding.AI: one bell press becomes a whole sentence</title>
+  <meta name="description" content="Ding.AI lets someone with ALS or locked-in syndrome speak in whole sentences with one bell. The AI guesses what they want to say; one ring says it aloud." />
+  <meta name="theme-color" content="#faf9f5" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/source-serif-4.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/figtree.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    // Follow the day like the Bell Screen: night from 21:00 to 05:00 unless the visitor picked a theme.
+    (function () {
+      var pick = localStorage.getItem('ding-theme') || 'auto'
+      var h = new Date().getHours()
+      var t = pick === 'auto' ? (h >= 21 || h < 5 ? 'dark' : 'light') : pick
+      document.documentElement.dataset.theme = t
+      document.documentElement.dataset.pick = pick
+      document.documentElement.classList.add('js')
+    })()
+  </script>
+</head>
+<body>
+
+<!-- Icon sprite: lucide line icons (ISC licence), drawn at stroke 2 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M3 20a1 1 0 0 1-1-1v-1a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1Z"/><path d="M20 16a8 8 0 1 0-16 0"/><path d="M12 4v4"/><path d="M10 4h4"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-light" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></symbol>
+    <symbol id="i-tv" viewBox="0 0 24 24"><rect width="20" height="15" x="2" y="7" rx="2"/><path d="m17 2-5 5-5-5"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/><path d="m18 14 4 4-4 4"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></symbol>
+    <symbol id="i-sprout" viewBox="0 0 24 24"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></symbol>
+    <symbol id="i-offline" viewBox="0 0 24 24"><path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M5 12.86a10 10 0 0 1 5.17-2.69"/><path d="M19 12.86a10 10 0 0 0-2-1.52"/><path d="M2 8.82a15 15 0 0 1 4.18-2.64"/><path d="M22 8.82a15 15 0 0 0-11.29-3.76"/><path d="m2 2 20 20"/></symbol>
+    <symbol id="i-house" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+    <symbol id="i-sunmoon" viewBox="0 0 24 24"><path d="M12 8a2.83 2.83 0 0 0 4 4 4 4 0 1 1-4-4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></symbol>
+    <symbol id="i-github" viewBox="0 0 24 24"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-thermo" viewBox="0 0 24 24"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></symbol>
+    <symbol id="i-wind" viewBox="0 0 24 24"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  </defs>
+</svg>
+
+<a class="skip" href="#try">Skip to the live demo</a>
+
+<header class="nav">
+  <a class="brand" href="#top" aria-label="Ding.AI home"><svg class="ic" width="26" height="26"><use href="#i-bell"/></svg>Ding.AI</a>
+  <nav aria-label="Sections">
+    <a href="#try">Try it</a>
+    <a href="#how">How it works</a>
+    <a href="#hardware">Hardware</a>
+    <a href="#run">Run it</a>
+  </nav>
+  <button class="theme-btn" id="themeBtn" type="button" aria-label="Theme: follows the time of day">
+    <svg class="ic t-auto" width="18" height="18"><use href="#i-sunmoon"/></svg>
+    <svg class="ic t-light" width="18" height="18"><use href="#i-sun"/></svg>
+    <svg class="ic t-dark" width="18" height="18"><use href="#i-moon"/></svg>
+    <span id="themeLabel">Auto</span>
+  </button>
+  <a class="gh" href="https://github.com/amarnath3003/DingDing"><svg class="ic" width="18" height="18"><use href="#i-github"/></svg><span>GitHub</span></a>
+</header>
+
+<main id="top">
+
+  <!-- ============================== Hero ============================== -->
+  <section class="hero" id="hero">
+    <div class="hero-copy">
+      <h1 id="heroTitle">
+        <span class="h1-then">Hector’s bell could say one thing: come here.</span>
+        <span class="h1-now">Ding.AI’s bell can say anything.</span>
+      </h1>
+      <p class="lede">People with ALS or locked-in syndrome often keep a sharp mind and exactly one reliable movement. Ding.AI turns that movement into whole sentences. It guesses what you want to say from the moment you are in, offers the guesses one at a time, and one ring says the chosen one aloud in your voice.</p>
+      <div class="cta">
+        <a class="btn primary" href="#try"><svg class="ic" width="18" height="18"><use href="#i-bell"/></svg>Try the full demo</a>
+        <a class="btn" href="https://github.com/amarnath3003/DingDing"><svg class="ic" width="18" height="18"><use href="#i-github"/></svg>Read the code</a>
+      </div>
+      <p class="made">Built for the Hacking Human Ability Hackathon, Claude Community and Superhuman Labs.</p>
+    </div>
+
+    <!-- The stage: one ring becomes many sentences. hero.js runs the bell, the sentences and the speaker. -->
+    <div class="stage" id="stage" role="group" aria-label="A desk call bell surrounded by sentences it could say. A highlight walks the sentences; pressing the bell says the lit one aloud.">
+      <div class="stage-halo" id="halo" aria-hidden="true"><i></i></div>
+      <svg class="ripples" id="ripples" aria-hidden="true"></svg>
+      <button class="stage-bell" id="stageBell" type="button" aria-label="Ring the bell to say the highlighted sentence">
+        <svg viewBox="0 0 640 420" aria-hidden="true">
+          <defs>
+            <linearGradient id="hDomeG" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" class="dome-a" /><stop offset=".7" class="dome-b" /><stop offset="1" class="dome-c" />
+            </linearGradient>
+            <linearGradient id="hBaseG" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" class="base-a" /><stop offset="1" class="base-b" />
+            </linearGradient>
+            <radialGradient id="hDomeLight" cx="38%" cy="30%" r="60%">
+              <stop offset="0" class="light-a" /><stop offset="1" class="light-b" />
+            </radialGradient>
+          </defs>
+          <ellipse id="bShadow" cx="320" cy="400" rx="236" ry="15" class="shadow" />
+          <g id="bBase" class="b-base">
+            <rect x="104" y="326" width="432" height="62" rx="18" fill="url(#hBaseG)" />
+            <rect x="128" y="338" width="384" height="5" rx="2.5" class="base-shine" />
+          </g>
+          <g id="bDome">
+            <g id="bDomeIn">
+              <path class="dome-fill" d="M134 330 A186 186 0 0 1 506 330 Z" fill="url(#hDomeG)" />
+              <path class="dome-light" d="M134 330 A186 186 0 0 1 506 330 Z" fill="url(#hDomeLight)" />
+              <path id="bShine" class="dome-shine" d="M178 292 A150 150 0 0 1 270 178" fill="none" />
+              <path class="dome-line" d="M134 330 A186 186 0 0 1 506 330" fill="none" pathLength="1" />
+              <path class="dome-rim" d="M134 330 H506" fill="none" pathLength="1" />
+            </g>
+            <g id="bPlunger"><g id="bPlungerIn">
+              <rect x="310" y="112" width="20" height="38" rx="4" class="stem" />
+              <rect x="268" y="94" width="104" height="24" rx="12" class="cap" />
+              <rect x="282" y="99" width="40" height="5" rx="2.5" class="cap-shine" />
+            </g></g>
+            <ellipse cx="320" cy="146" rx="28" ry="8" class="knob" />
+          </g>
+          <g class="b-marks" fill="none" stroke-linecap="round">
+            <path class="b-mark l" d="M246 120 q-26 -34 0 -68" /><path class="b-mark r" d="M394 120 q26 -34 0 -68" />
+            <path class="b-mark l far" d="M214 132 q-44 -56 0 -112" /><path class="b-mark r far" d="M426 132 q44 -56 0 -112" />
+          </g>
+        </svg>
+      </button>
+      <div class="bubbles" id="bubbles" aria-hidden="true"></div>
+      <div class="speaker" id="speaker">
+        <svg class="ic" width="20" height="20" aria-hidden="true"><use href="#i-volume"/></svg>
+        <span class="sp-text" id="spText">Press the bell to say the lit sentence.</span>
+        <span class="sp-wave" id="spWave" aria-hidden="true"></span>
+        <button class="sound-btn" type="button" data-sound aria-pressed="true" aria-label="Sound">
+          <svg class="ic v-on" width="16" height="16"><use href="#i-volume"/></svg>
+          <svg class="ic v-off" width="16" height="16"><use href="#i-mute"/></svg>
+          <span class="lbl">Sound on</span>
+        </button>
+      </div>
+      <p class="sr-only" id="heroLive" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <!-- ============================== Live demo ============================== -->
+  <section class="try" id="try" aria-labelledby="try-h">
+    <div class="sec-head">
+      <h2 id="try-h">You have one button. Try it.</h2>
+      <p>This is the Bell Screen, running a scripted morning. The highlight walks down the options on its own. Ring when it reaches the one you want. Press <kbd>Space</kbd>, or press the bell.</p>
+    </div>
+
+    <div class="demo-wrap">
+      <div class="demo" id="demo">
+        <aside class="d-side" aria-label="Context the AI can see">
+          <div class="d-brand"><svg class="ic" width="22" height="22"><use href="#i-bell"/></svg>Ding.AI</div>
+          <div class="d-when"><strong id="dClock">07:40</strong><span id="dDay">Sunday</span></div>
+          <div class="d-group">
+            <h3>In the room <span class="sim-tag">Simulated</span></h3>
+            <div class="d-row"><svg class="ic" width="17" height="17"><use href="#i-users"/></svg><span id="dPeople">Lakshmi</span></div>
+            <div class="d-row"><svg class="ic" width="17" height="17"><use href="#i-light"/></svg>Light<span class="val" id="dLight">Off</span></div>
+            <div class="d-row"><svg class="ic" width="17" height="17"><use href="#i-tv"/></svg>TV<span class="val" id="dTv">Off</span></div>
+          </div>
+          <div class="d-group">
+            <h3>Body <span class="sim-tag">Simulated</span></h3>
+            <div class="d-row"><svg class="ic" width="17" height="17"><use href="#i-heart"/></svg>Heart rate<span class="val">74</span></div>
+            <div class="d-row"><svg class="ic" width="17" height="17"><use href="#i-wind"/></svg>Oxygen<span class="val">97%</span></div>
+          </div>
+          <div class="d-group">
+            <h3>Camera</h3>
+            <div class="d-row"><svg class="ic" width="17" height="17"><use href="#i-eye"/></svg>Looks<span class="val" id="dFace">neutral</span></div>
+          </div>
+        </aside>
+
+        <div class="d-main">
+          <div class="d-title" id="dTitle">Sunday morning with Lakshmi</div>
+          <div class="d-column" id="dColumn">
+            <div class="d-transcript" id="dTranscript" aria-live="polite"></div>
+            <div id="dBody"></div>
+            <div class="d-actions" id="dActions"></div>
+          </div>
+          <div class="d-composer-wrap">
+            <div class="d-composer">
+              <svg class="ic" width="20" height="20"><use href="#i-volume"/></svg>
+              <span class="said" id="dSaid">Ring to choose. It’s spoken aloud.</span>
+              <span class="bell-fx" id="dFx"></span>
+              <span class="keys"><span><kbd>Press</kbd>choose</span><span><kbd>Hold</kbd>undo</span><span><kbd>3 taps</kbd>help</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ringer">
+        <button class="ring" id="ring" type="button" aria-describedby="ringHint">
+          <svg viewBox="0 0 200 170" aria-hidden="true">
+            <g class="ring-waves" fill="none" stroke-linecap="round">
+              <path d="M70 40 q-14 -18 0 -36" /><path d="M130 40 q14 -18 0 -36" />
+              <path d="M52 50 q-24 -30 0 -60" /><path d="M148 50 q24 -30 0 -60" />
+            </g>
+            <ellipse cx="100" cy="160" rx="80" ry="7" class="shadow" />
+            <rect x="22" y="128" width="156" height="26" rx="8" class="r-base" />
+            <path d="M34 132 A66 66 0 0 1 166 132 Z" class="r-dome" />
+            <g class="r-plunger"><rect x="95" y="52" width="10" height="16" rx="2" class="stem" /><rect x="80" y="44" width="40" height="11" rx="5.5" class="cap" /></g>
+          </svg>
+          <span class="ring-label">Ring</span>
+        </button>
+        <p class="ring-hint" id="ringHint">Tap to choose. Hold for a second to undo. Three quick taps calls for help.</p>
+        <button class="voice-btn" type="button" data-sound aria-pressed="true" aria-label="Sound">
+          <svg class="ic v-on" width="16" height="16"><use href="#i-volume"/></svg>
+          <svg class="ic v-off" width="16" height="16"><use href="#i-mute"/></svg>
+          <span class="lbl">Sound on</span>
+        </button>
+      </div>
+    </div>
+    <p class="persona-note">Ravi, Lakshmi, Meena, Arjun and Dr. Rao are an illustrative persona, not real people. In the real app the guesses come from gpt-5-mini; here they are scripted so the demo works offline.</p>
+  </section>
+
+  <!-- ============================== The gap ============================== -->
+  <section class="gap" aria-labelledby="gap-h">
+    <div class="gap-copy">
+      <h2 id="gap-h">Spelling one word takes most of a minute.</h2>
+      <p>With row-and-column scanning, each letter costs two presses and a wait while the highlight crawls to it. Spelling <em>water</em> on this grid takes 32 scan steps and 10 presses: about 38 seconds at a 1.2&nbsp;s scan. By then the conversation has moved on.</p>
+      <p>Ding.AI doesn’t make you spell. When “I need water, please.” is the first guess, it takes one step and one press.</p>
+    </div>
+    <div class="gap-art">
+      <figure class="grid-fig" aria-label="A letter grid with W, A, T, E and R marked in the order they are reached">
+        <div class="lgrid" id="lgrid"></div>
+        <figcaption><strong>Spelling</strong> 10 presses, 32 steps, about 38 s</figcaption>
+      </figure>
+      <figure class="one-fig">
+        <div class="one-line"><span>I need water, please.</span><i></i></div>
+        <figcaption><strong>Ding.AI</strong> 1 press, 1 step, 1.2 s</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ============================== The room ============================== -->
+  <section class="room" aria-labelledby="room-h">
+    <figure class="room-art" aria-label="A bedside scene. Ravi rests in bed with his hand by a desk bell on the tray table. A laptop on the tray shows four sentences with one highlighted, and speaks it: Tea, please. Less sugar than usual. Lakshmi stands nearby holding a cup of tea.">
+      <svg viewBox="0 0 1000 540" aria-hidden="true">
+        <!-- wall and floor -->
+        <rect x="0" y="0" width="1000" height="476" class="wall" />
+        <rect x="0" y="476" width="1000" height="64" class="floor" />
+        <line x1="0" y1="476" x2="1000" y2="476" class="hair" />
+        <!-- window -->
+        <rect x="70" y="60" width="200" height="190" rx="10" class="window" />
+        <circle cx="200" cy="130" r="30" class="sky-body" />
+        <line x1="170" y1="60" x2="170" y2="250" class="frame" />
+        <line x1="70" y1="155" x2="270" y2="155" class="frame" />
+        <rect x="70" y="60" width="200" height="190" rx="10" class="frame-out" />
+        <!-- bed -->
+        <rect x="100" y="250" width="26" height="236" rx="8" class="bed-wood" />
+        <rect x="114" y="380" width="560" height="52" rx="16" class="mattress" />
+        <rect x="114" y="428" width="560" height="22" rx="6" class="bed-wood" />
+        <rect x="652" y="380" width="22" height="106" rx="6" class="bed-wood" />
+        <!-- raised pillow -->
+        <path d="M130 384 C126 330 150 296 196 290 L244 300 C214 330 206 360 210 384 Z" class="pillow" />
+        <!-- person: head, shoulders, blanket -->
+        <circle cx="222" cy="300" r="34" class="skin" />
+        <path d="M236 270 C214 258 188 266 190 292 C202 276 220 272 236 278 Z" class="hair-fill" />
+        <path d="M190 384 C186 350 204 330 242 330 L300 334 C324 336 336 352 336 384 Z" class="shirt" />
+        <path d="M268 384 C272 360 300 350 340 350 L630 352 C650 352 660 366 658 384 Z" class="blanket" />
+        <path d="M360 356 C380 372 430 372 452 358" class="fold" />
+        <path d="M500 356 C520 370 566 370 586 356" class="fold" />
+        <!-- arm resting toward the bell -->
+        <path d="M290 340 C320 344 350 334 384 324" class="arm" />
+        <circle cx="390" cy="322" r="9" class="skin" />
+        <!-- over-bed tray table -->
+        <rect x="352" y="330" width="290" height="12" rx="6" class="tray" />
+        <rect x="610" y="342" width="12" height="134" class="tray" />
+        <rect x="580" y="472" width="80" height="10" rx="5" class="tray" />
+        <!-- bell on tray -->
+        <rect x="380" y="318" width="52" height="12" rx="4" class="bell-base" />
+        <path d="M384 320 A22 22 0 0 1 428 320 Z" class="bell-dome" />
+        <rect x="403" y="290" width="6" height="10" rx="1.5" class="bell-ink" />
+        <rect x="396" y="286" width="20" height="6" rx="3" class="bell-ink" />
+        <g class="small-waves" fill="none" stroke-linecap="round">
+          <path d="M386 292 q-8 -10 0 -20" /><path d="M426 292 q8 -10 0 -20" />
+        </g>
+        <!-- laptop -->
+        <path d="M462 330 L622 330 L630 318 L456 318 Z" class="lap-base" />
+        <rect x="470" y="206" width="146" height="108" rx="8" class="lap-screen" />
+        <rect x="480" y="216" width="126" height="88" rx="4" class="lap-glass" />
+        <rect x="488" y="226" width="70" height="6" rx="3" class="lap-line" />
+        <rect x="486" y="240" width="114" height="16" rx="5" class="lap-hi" />
+        <rect x="492" y="246" width="78" height="5" rx="2.5" class="lap-hi-line" />
+        <rect x="486" y="252" width="56" height="3" rx="1.5" class="lap-dwell" />
+        <rect x="492" y="266" width="92" height="5" rx="2.5" class="lap-line" />
+        <rect x="492" y="280" width="62" height="5" rx="2.5" class="lap-line" />
+        <rect x="492" y="294" width="84" height="5" rx="2.5" class="lap-line" />
+        <!-- voice -->
+        <g class="voice-waves" fill="none" stroke-linecap="round">
+          <path d="M630 236 q10 12 0 24" /><path d="M644 226 q18 22 0 44" />
+        </g>
+        <!-- speech bubble -->
+        <g class="bubble-g">
+          <rect x="540" y="86" width="412" height="66" rx="22" class="say-bubble" />
+          <path d="M610 150 L596 178 L640 152 Z" class="say-bubble" />
+          <text x="746" y="128" text-anchor="middle" class="say-text">Tea, please. Less sugar than usual.</text>
+        </g>
+        <!-- Lakshmi -->
+        <circle cx="820" cy="236" r="30" class="skin2" />
+        <path d="M790 228 C788 198 852 196 850 230 C846 212 800 210 790 228 Z" class="hair-fill" />
+        <path d="M776 476 L790 296 C792 276 806 268 820 268 C834 268 848 276 850 296 L864 476 Z" class="sari" />
+        <path d="M808 270 C830 300 846 360 854 420" class="sari-drape" />
+        <path d="M796 312 C780 336 760 352 748 360" class="arm2" />
+        <rect x="726" y="344" width="28" height="30" rx="5" class="cup" />
+        <path d="M754 352 q10 0 10 8 q0 8 -10 8" class="cup-handle" />
+        <g class="steam" fill="none" stroke-linecap="round">
+          <path d="M734 336 q-6 -10 0 -18 q6 -8 0 -18" /><path d="M746 336 q-6 -10 0 -18 q6 -8 0 -18" />
+        </g>
+      </svg>
+      <figcaption>Viewed on a laptop at arm’s length, on a table or a wheelchair tray. The people nearby read the same screen and hear the same voice.</figcaption>
+    </figure>
+    <div class="room-copy">
+      <h2 id="room-h">Built around one reliable movement.</h2>
+      <p>The person using Ding.AI cannot use a mouse, touch or a keyboard. Their only output is one small movement that presses a desk call bell, and every press costs effort. So the screen never asks for more than that.</p>
+      <ul class="principles">
+        <li><strong>Every press is precious.</strong> Fewer, better options, the likeliest first.</li>
+        <li><strong>Their words, their tone.</strong> Dry humour stays dry. Never childish, never clinical.</li>
+        <li><strong>Nothing moves under their eyes.</strong> Options never reorder while they are being scanned.</li>
+        <li><strong>Help is always one scan away.</strong> Three quick taps, from anywhere.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============================== Gestures ============================== -->
+  <section class="gestures" id="how" aria-labelledby="g-h">
+    <div class="sec-head">
+      <h2 id="g-h">One bell, three gestures.</h2>
+      <p>The highlight freezes the instant the bell goes down, so a press counts for the option that was lit when you reacted, not when the gesture finished.</p>
+    </div>
+    <div class="g-list">
+      <article class="g">
+        <svg class="rhythm" viewBox="0 0 320 90" aria-hidden="true">
+          <line x1="10" y1="60" x2="310" y2="60" class="axis" />
+          <rect x="20" y="36" width="22" height="24" rx="4" class="beat" />
+          <text x="20" y="82" class="tick">0</text><text x="200" y="82" class="tick">1 s</text>
+          <line x1="210" y1="54" x2="210" y2="66" class="axis" />
+        </svg>
+        <h3>Press</h3>
+        <p>One tap chooses the highlighted option, and it is spoken aloud.</p>
+      </article>
+      <article class="g">
+        <svg class="rhythm" viewBox="0 0 320 90" aria-hidden="true">
+          <line x1="10" y1="60" x2="310" y2="60" class="axis" />
+          <rect x="20" y="36" width="214" height="24" rx="4" class="beat" />
+          <line x1="210" y1="26" x2="210" y2="66" class="mark" />
+          <text x="20" y="82" class="tick">0</text><text x="200" y="82" class="tick">1 s</text>
+          <text x="218" y="24" class="tick">let go</text>
+        </svg>
+        <h3>Hold</h3>
+        <p>A second or more confirms the bigger moves: speak the draft, ask for “close, but…” variations, undo, go back.</p>
+      </article>
+      <article class="g">
+        <svg class="rhythm" viewBox="0 0 320 90" aria-hidden="true">
+          <line x1="10" y1="60" x2="310" y2="60" class="axis" />
+          <rect x="20" y="36" width="18" height="24" rx="4" class="beat" />
+          <rect x="70" y="36" width="18" height="24" rx="4" class="beat" />
+          <rect x="120" y="36" width="18" height="24" rx="4" class="beat help" />
+          <line x1="129" y1="26" x2="129" y2="34" class="mark help" />
+          <text x="20" y="82" class="tick">0</text><text x="200" y="82" class="tick">1 s</text>
+          <line x1="210" y1="54" x2="210" y2="66" class="axis" />
+          <text x="146" y="28" class="tick help">Help fires</text>
+        </svg>
+        <h3>Three quick taps</h3>
+        <p>Help fires on the third tap, with no waiting. The caregiver presses “I’m coming” and Ding.AI says so out loud.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============================== Context ============================== -->
+  <section class="context" aria-labelledby="c-h">
+    <div class="sec-head">
+      <h2 id="c-h">It reads the moment, then guesses.</h2>
+      <p>Before each set of guesses the model sees who is waiting for an answer, what was just said, the time and the routine that is due, the room, any vitals that are off, and the face. Then the hub screens every card: no parroting the question, no asking for someone already in the room, no repeats.</p>
+    </div>
+    <div class="flow">
+      <ul class="moment" aria-label="What the model sees">
+        <li><svg class="ic" width="20" height="20"><use href="#i-message"/></svg><span>Arjun just asked</span><b>“Thatha, can we watch cricket?”</b></li>
+        <li><svg class="ic" width="20" height="20"><use href="#i-users"/></svg><span>In the room</span><b>Arjun, Lakshmi</b></li>
+        <li><svg class="ic" width="20" height="20"><use href="#i-clock"/></svg><span>Time</span><b>Sunday, 18:10</b></li>
+        <li><svg class="ic" width="20" height="20"><use href="#i-tv"/></svg><span>Routine</span><b>TV on for cricket in the evening</b></li>
+        <li><svg class="ic" width="20" height="20"><use href="#i-house"/></svg><span>Room <span class="sim-tag">Simulated</span></span><b>TV off, a little warm</b></li>
+        <li><svg class="ic" width="20" height="20"><use href="#i-eye"/></svg><span>Face</span><b>smiling, attentive</b></li>
+      </ul>
+      <svg class="funnel" viewBox="0 0 220 420" preserveAspectRatio="none" aria-hidden="true">
+        <g fill="none" class="strands">
+          <path d="M0 35 C110 35 110 210 220 210" /><path d="M0 105 C110 105 110 210 220 210" />
+          <path d="M0 175 C110 175 110 210 220 210" /><path d="M0 245 C110 245 110 210 220 210" />
+          <path d="M0 315 C110 315 110 210 220 210" /><path d="M0 385 C110 385 110 210 220 210" />
+        </g>
+      </svg>
+      <div class="hub-node" aria-hidden="true"><svg class="ic" width="34" height="34"><use href="#i-bell"/></svg><span>gpt-5-mini</span></div>
+      <svg class="funnel out" viewBox="0 0 160 420" preserveAspectRatio="none" aria-hidden="true">
+        <g fill="none" class="strands">
+          <path d="M0 210 C80 210 80 60 160 60" /><path d="M0 210 C80 210 80 160 160 160" />
+          <path d="M0 210 C80 210 80 260 160 260" /><path d="M0 210 C80 210 80 360 160 360" />
+        </g>
+      </svg>
+      <ol class="cards" aria-label="Four guesses, likeliest first">
+        <li class="is-hi"><span>Only if you tell me the score first.</span><i></i></li>
+        <li><span>Yes. Put the TV on, champion.</span><em class="does"><svg class="ic" width="15" height="15"><use href="#i-tv"/></svg>Turns on</em></li>
+        <li><span>After your homework, Arjun.</span></li>
+        <li><span>Sit with me. We’ll watch together.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============================== Capabilities ============================== -->
+  <section class="caps" aria-labelledby="caps-h">
+    <h2 id="caps-h">Everything else it does, with the same bell.</h2>
+    <div class="caps-grid">
+      <article><svg class="ic" width="26" height="26"><use href="#i-message"/></svg><h3>Keeps up with conversation</h3><p>When someone speaks, typed or heard by the microphone, every card becomes a reply to them. It answers what was asked and never repeats the question back.</p></article>
+      <article><svg class="ic" width="26" height="26"><use href="#i-keyboard"/></svg><h3>A Hawking keyboard, rebuilt</h3><p>For anything the guesses miss: sentence completions that even expand initials like “i w t g o”, next words and likeliest letters. Local prediction is instant; the AI’s lands about 1.5 s later.</p></article>
+      <article><svg class="ic" width="26" height="26"><use href="#i-volume"/></svg><h3>Sounds like a person</h3><p>Chosen words are spoken with OpenAI text-to-speech, cached and fetched ahead for the top cards, so a ring speaks instantly. Ding.AI’s own alerts use a separate voice.</p></article>
+      <article><svg class="ic" width="26" height="26"><use href="#i-light"/></svg><h3>Controls the room</h3><p>“Turn the light on, please.” both says it and does it. A card may only switch a device if its own words mention it, so nothing happens that wasn’t said.</p></article>
+      <article><svg class="ic" width="26" height="26"><use href="#i-sprout"/></svg><h3>Learns the longer it’s used</h3><p>Every pick is remembered with its moment. Ask again, even in different words, and the last answer comes back first, marked Learned. It is stored on that machine only.</p></article>
+      <article><svg class="ic" width="26" height="26"><use href="#i-offline"/></svg><h3>Never runs out of options</h3><p>If the AI is slow or unreachable, a hard deadline swaps in a local phrasebook and a 20,000-word predictor.</p></article>
+    </div>
+  </section>
+
+
+  <!-- ============================== Night ============================== -->
+  <section class="night" data-theme="dark" aria-labelledby="n-h">
+    <div class="night-in">
+      <div class="sec-head">
+        <h2 id="n-h">At night, it keeps watch.</h2>
+        <p>The screen goes dark at nine and stays beside the bed. If something looks wrong and the bell stays silent, Ding.AI doesn’t wait to be asked.</p>
+      </div>
+      <div class="night-grid">
+        <figure class="night-art" aria-label="A bedroom at night. Ravi rests in bed under a crescent moon. The laptop on the bedside table glows and says aloud: Lakshmi is coming. Lakshmi stands in the lit doorway.">
+          <svg viewBox="0 0 900 520" aria-hidden="true">
+            <defs>
+              <radialGradient id="screenGlow" cx="50%" cy="50%" r="50%">
+                <stop offset="0" class="glow-a" /><stop offset="1" class="glow-b" />
+              </radialGradient>
+              <linearGradient id="doorLight" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" class="door-a" /><stop offset="1" class="door-b" />
+              </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="900" height="476" class="wall" />
+            <rect x="0" y="476" width="900" height="44" class="floor" />
+            <!-- window, moon, stars -->
+            <rect x="60" y="60" width="180" height="180" rx="10" class="n-window" />
+            <circle cx="160" cy="126" r="30" class="moon" />
+            <circle cx="174" cy="116" r="27" class="n-window" />
+            <g class="stars"><circle cx="96" cy="92" r="2.5" /><circle cx="210" cy="190" r="2" /><circle cx="118" cy="196" r="2" /><circle cx="214" cy="84" r="1.8" /></g>
+            <line x1="150" y1="60" x2="150" y2="240" class="frame" />
+            <line x1="60" y1="150" x2="240" y2="150" class="frame" />
+            <rect x="60" y="60" width="180" height="180" rx="10" class="frame-out" />
+            <!-- door with warm light, Lakshmi arriving -->
+            <polygon points="700,476 820,476 900,520 640,520" class="door-spill" />
+            <rect x="700" y="150" width="120" height="326" fill="url(#doorLight)" />
+            <rect x="694" y="144" width="132" height="332" rx="4" class="door-frame" />
+            <circle cx="762" cy="246" r="24" class="silhouette" />
+            <path d="M730 476 L742 300 C744 284 752 278 762 278 C772 278 780 284 782 300 L794 476 Z" class="silhouette" />
+            <!-- bed -->
+            <rect x="90" y="300" width="24" height="186" rx="8" class="bed-wood" />
+            <rect x="104" y="392" width="440" height="44" rx="14" class="mattress" />
+            <rect x="104" y="432" width="440" height="20" rx="6" class="bed-wood" />
+            <rect x="522" y="392" width="22" height="94" rx="6" class="bed-wood" />
+            <ellipse cx="172" cy="386" rx="56" ry="16" class="pillow" />
+            <circle cx="168" cy="366" r="26" class="skin" />
+            <path d="M188 348 C176 338 152 340 146 360 C156 350 172 348 188 354 Z" class="hair-fill" />
+            <path d="M196 396 C200 360 240 348 290 350 L520 356 C536 358 544 372 540 396 Z" class="blanket" />
+            <path d="M310 360 C330 376 380 376 400 362" class="fold" />
+            <!-- bedside table, laptop glow -->
+            <ellipse cx="626" cy="322" rx="150" ry="120" fill="url(#screenGlow)" />
+            <rect x="568" y="360" width="116" height="10" rx="4" class="tray" />
+            <rect x="578" y="370" width="10" height="106" class="tray" />
+            <rect x="664" y="370" width="10" height="106" class="tray" />
+            <path d="M584 360 L668 360 L674 352 L578 352 Z" class="lap-base" />
+            <rect x="588" y="286" width="76" height="62" rx="6" class="lap-screen" />
+            <rect x="594" y="292" width="64" height="50" rx="3" class="lap-glass" />
+            <rect x="600" y="300" width="40" height="6" rx="3" class="lap-line" />
+            <rect x="600" y="312" width="50" height="3" rx="1.5" class="n-countdown" />
+            <rect x="598" y="322" width="56" height="12" rx="4" class="lap-hi" />
+            <!-- bell on the bed by his hand -->
+            <rect x="452" y="384" width="36" height="9" rx="3" class="bell-base" />
+            <path d="M455 386 A15 15 0 0 1 485 386 Z" class="bell-dome" />
+            <rect x="468" y="366" width="4" height="7" rx="1" class="bell-ink" />
+            <!-- Ding.AI says it aloud, in its own (sans) voice -->
+            <g class="voice-waves" fill="none" stroke-linecap="round"><path d="M676 300 q8 10 0 20" /><path d="M688 292 q14 18 0 36" /></g>
+            <rect x="420" y="192" width="270" height="60" rx="20" class="say-bubble" />
+            <path d="M600 250 L616 278 L630 250 Z" class="say-bubble" />
+            <text x="555" y="230" text-anchor="middle" class="ding-text">“Lakshmi is coming.”</text>
+          </svg>
+        </figure>
+        <div class="checkin-card" aria-label="The check-in screen">
+          <h3 class="ck-q">Are you OK?</h3>
+          <p class="ck-why">Heart rate 128 for 5 seconds <span class="sim-tag">Simulated</span></p>
+          <div class="ck-count"><i></i></div>
+          <p class="ck-left">Help is called in 11 s if there’s no answer.</p>
+          <div class="ck-opts">
+            <div class="ck-opt is-hi">I’m fine. Just a bad dream.<i></i></div>
+            <div class="ck-opt">Get Lakshmi, please.</div>
+            <div class="ck-opt">I’m not OK. Call for help.</div>
+          </div>
+        </div>
+      </div>
+      <ol class="steps">
+        <li><b>1</b><span>Vitals stay critical for 5 seconds.</span></li>
+        <li><b>2</b><span>Ding.AI asks “Are you OK?”, on screen and out loud.</span></li>
+        <li><b>3</b><span>No answer in 20 seconds, and it calls for help on its own.</span></li>
+        <li><b>4</b><span>The caregiver presses “I’m coming”, and Ding.AI says so.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============================== Hardware ============================== -->
+  <section class="hardware" id="hardware" aria-labelledby="hw-h">
+    <div class="sec-head">
+      <h2 id="hw-h">A real desk bell, two wires and an ESP32.</h2>
+      <p>The bell is an ordinary service bell. A switch between GPIO 4 and ground, with the internal pull-up on, is all the electronics there is. The ESP32 only sends debounced down and up edges over USB, and the hub classifies them with the same code as the Enter key.</p>
+    </div>
+    <figure class="hw-art" aria-label="Wiring: a microswitch under the bell's plunger connects to GPIO 4 and GND on an ESP32, which connects by USB to the laptop running Ding.AI. The laptop receives DOWN and UP events.">
+      <svg viewBox="0 80 1000 250" aria-hidden="true">
+        <!-- bell -->
+        <ellipse cx="170" cy="282" rx="130" ry="10" class="shadow" />
+        <rect x="56" y="232" width="228" height="42" rx="12" class="hw-base" />
+        <path d="M74 236 A96 96 0 0 1 266 236 Z" class="hw-dome" />
+        <rect x="163" y="120" width="14" height="24" rx="3" class="hw-ink" />
+        <rect x="140" y="108" width="60" height="16" rx="8" class="hw-ink" />
+        <!-- microswitch under plunger -->
+        <rect x="148" y="214" width="44" height="18" rx="4" class="hw-switch" />
+        <path d="M156 214 L170 204 L184 208" class="hw-lever" />
+        <line x1="170" y1="146" x2="170" y2="204" class="hw-rod" />
+        <text x="170" y="312" text-anchor="middle" class="hw-label">Microswitch inside, under the plunger</text>
+        <!-- wires -->
+        <path d="M184 226 C330 226 330 140 470 140" class="wire clay" />
+        <path d="M156 226 C300 250 340 196 470 196" class="wire ink" />
+        <!-- ESP32 -->
+        <rect x="470" y="86" width="210" height="168" rx="14" class="esp" />
+        <rect x="540" y="130" width="70" height="70" rx="6" class="esp-chip" />
+        <g class="pins">
+          <rect x="484" y="98" width="10" height="10" rx="2" /><rect x="484" y="124" width="10" height="10" rx="2" /><rect x="484" y="150" width="10" height="10" rx="2" /><rect x="484" y="176" width="10" height="10" rx="2" /><rect x="484" y="202" width="10" height="10" rx="2" /><rect x="484" y="228" width="10" height="10" rx="2" />
+          <rect x="656" y="98" width="10" height="10" rx="2" /><rect x="656" y="124" width="10" height="10" rx="2" /><rect x="656" y="150" width="10" height="10" rx="2" /><rect x="656" y="176" width="10" height="10" rx="2" /><rect x="656" y="202" width="10" height="10" rx="2" /><rect x="656" y="228" width="10" height="10" rx="2" />
+        </g>
+        <circle cx="474" cy="140" r="6" class="dot-clay" /><circle cx="474" cy="196" r="6" class="dot-ink" />
+        <text x="432" y="132" text-anchor="end" class="hw-label strong">GPIO 4</text>
+        <text x="432" y="214" text-anchor="end" class="hw-label strong">GND</text>
+        <text x="575" y="282" text-anchor="middle" class="hw-label">ESP32, MicroPython</text>
+        <rect x="680" y="192" width="12" height="18" rx="2" class="esp-usb" />
+        <!-- USB -->
+        <path d="M692 201 C716 201 712 229 736 229" class="wire usb" />
+        <!-- laptop -->
+        <rect x="740" y="92" width="200" height="132" rx="10" class="lap-screen" />
+        <rect x="752" y="104" width="176" height="108" rx="5" class="lap-glass" />
+        <text x="770" y="140" class="hw-code">DOWN</text>
+        <text x="770" y="168" class="hw-code">UP</text>
+        <text x="836" y="140" class="hw-code faint">3 ms</text>
+        <text x="836" y="168" class="hw-code faint">30 ms</text>
+        <path d="M722 236 L958 236 L946 222 L734 222 Z" class="lap-base" />
+        <text x="840" y="270" text-anchor="middle" class="hw-label">Hub on the laptop</text>
+      </svg>
+    </figure>
+    <div class="hw-notes">
+      <p><strong>Tuned on a real bell.</strong> A raw capture of a desk bell showed contact chatter of 30 to 300 ms and release chatter of 15 to 60 ms, so the hub debounces 3 ms on make and 30 ms on release.</p>
+      <p><strong>Lesson learned.</strong> On a metal bell the frame connects the striker to the dome permanently, so the dome can’t be the switch. Detect the plunger with a microswitch instead, and the bell keeps ringing.</p>
+      <p><strong>No bell yet?</strong> Enter is the bell. The behaviour is identical whichever you use.</p>
+    </div>
+  </section>
+
+  <!-- ============================== Numbers + honesty ============================== -->
+  <section class="facts" aria-labelledby="f-h">
+    <div class="facts-col">
+      <h2 id="f-h">What we measured.</h2>
+      <table class="nums">
+        <tbody>
+          <tr><td>Reply cards after someone speaks</td><td>≈ 2.7 s</td></tr>
+          <tr><td>Cost of a set of four guesses</td><td>≈ $0.001</td></tr>
+          <tr><td>Spoken reply after a ring, cached voice</td><td>instant</td></tr>
+          <tr><td>Bell edge to hub</td><td>&lt; 35 ms</td></tr>
+          <tr><td>Help after three taps</td><td>on the third tap</td></tr>
+        </tbody>
+      </table>
+      <p class="fine">An evaluation of 10 realistic moments picked the model: gpt-5-nano repeated questions and missed distress, while gpt-5-mini answered in the user’s voice at the same speed.</p>
+    </div>
+    <div class="facts-col">
+      <h2>What’s real and what’s simulated.</h2>
+      <table class="real">
+        <tbody>
+          <tr><td>Bell: ESP32 switch or the Enter key</td><td class="r">Real</td></tr>
+          <tr><td>Face: laptop camera and MediaPipe</td><td class="r">Real</td></tr>
+          <tr><td>AI guesses, keyboard and Ask AI chat</td><td class="r">Real, with an offline fallback</td></tr>
+          <tr><td>The user’s voice, and hearing people</td><td class="r">Real</td></tr>
+          <tr><td>Light, TV and SOS alarm</td><td class="r">Real with the room ESP32</td></tr>
+          <tr><td>Learning from picks</td><td class="r">Real, on this machine only</td></tr>
+          <tr><td>Heart rate, oxygen, blood pressure, temperature</td><td><span class="sim-tag">Simulated</span></td></tr>
+          <tr><td>Room temperature, humidity, light, noise, CO₂</td><td><span class="sim-tag">Simulated</span></td></tr>
+        </tbody>
+      </table>
+      <p class="fine">Everything simulated is labelled Simulated on screen, every time.</p>
+    </div>
+  </section>
+
+  <!-- ============================== Run it ============================== -->
+  <section class="run" id="run" aria-labelledby="run-h">
+    <div class="run-copy">
+      <h2 id="run-h">Run it on your laptop.</h2>
+      <p>Python for the hub, React for the screen. Add an OpenAI key, then open the Bell Screen on port 8000 and the operator panel at <code>/#/sim</code> in a second window.</p>
+      <a class="btn primary" href="https://github.com/amarnath3003/DingDing"><svg class="ic" width="18" height="18"><use href="#i-github"/></svg>Get the code on GitHub</a>
+    </div>
+    <div class="code">
+      <button class="copy" id="copyBtn" type="button"><svg class="ic" width="15" height="15"><use href="#i-copy"/></svg><span>Copy</span></button>
+<pre id="runCode"><code>python3 -m venv .venv
+.venv/bin/pip install -r code/requirements.txt
+cp code/.env.example code/.env   <span class="c"># add OPENAI_API_KEY</span>
+./code/run.sh                    <span class="c"># http://127.0.0.1:8000</span></code></pre>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <svg class="ic foot-bell" width="44" height="44"><use href="#i-bell"/></svg>
+  <p class="foot-line">The user supplies the decision.<br />The AI supplies the bandwidth.</p>
+  <p class="foot-meta">Built by <a href="https://github.com/amarnath3003">@amarnath3003</a> for the Hacking Human Ability Hackathon. Ravi is an illustrative persona; we make no medical claims.</p>
+</footer>
+
+<script src="main.js"></script>
+<script src="hero.js"></script>
+</body>
+</html>

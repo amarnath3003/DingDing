@@ -152,6 +152,39 @@ async def serial_cases():
     ]
 
 
+async def wifi_cases():
+    """bell_esp32.ino over Wi-Fi (a local TCP server stands in): same edges, PING ignored."""
+    async def board(reader, writer):
+        writer.write(b"READY level=1\nDOWN\nPING\nUP\nDOWN\n")
+        await writer.drain()
+        await asyncio.sleep(0.1)
+        writer.close()  # board gone mid-press
+
+    server = await asyncio.start_server(board, "127.0.0.1", 0)
+    real = config.BELL_WIFI_HOST, config.BELL_WIFI_PORT
+    config.BELL_WIFI_HOST, config.BELL_WIFI_PORT = "127.0.0.1", server.sockets[0].getsockname()[1]
+    edges, statuses = [], []
+
+    async def emit(e):
+        pass
+
+    async def edge(down):
+        edges.append(down)
+
+    async def on_status():
+        statuses.append(bell_mod.WIFI_STATUS["connected"])
+
+    task = asyncio.ensure_future(bell_mod.wifi_reader(emit, edge, on_status))
+    await asyncio.sleep(0.4)
+    task.cancel()
+    server.close()
+    config.BELL_WIFI_HOST, config.BELL_WIFI_PORT = real
+    return [
+        ("Wi-Fi DOWN/UP -> edges; link lost mid-press releases", edges == [True, False, True, False], edges),
+        ("Wi-Fi status pushed on connect and disconnect", statuses == [True, False], statuses),
+    ]
+
+
 async def hung_llm_cases():
     """The AI call hangs (flaky Wi-Fi): the deck still arrives, from the phrasebook, on time."""
     profile = json.loads(config.PROFILE_PATH.read_text())
@@ -281,7 +314,8 @@ def memory_cases():
 
 
 def main():
-    cases = (asyncio.run(bell_cases()) + asyncio.run(serial_cases()) + asyncio.run(hung_llm_cases())
+    cases = (asyncio.run(bell_cases()) + asyncio.run(serial_cases()) + asyncio.run(wifi_cases())
+             + asyncio.run(hung_llm_cases())
              + asyncio.run(room_cases())
              + other_cases() + memory_cases())
     bad = 0

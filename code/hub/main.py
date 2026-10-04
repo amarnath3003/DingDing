@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config
 from . import chat
-from .bell import SERIAL_STATUS, GestureClassifier, serial_reader
+from .bell import SERIAL_STATUS, WIFI_STATUS, GestureClassifier, serial_reader, wifi_reader
 from .brain import Brain, kb_letters
 from .devices import Devices
 from .environment import SCENARIOS as ENV_SCENARIOS, EnvironmentMock
@@ -108,7 +108,9 @@ class Hub:
         self._log_file = open(config.LOG_DIR / f"events-{datetime.now():%Y%m%d}.jsonl", "a")
         self.face.start()
         self._tasks = [asyncio.ensure_future(c) for c in (
-            self._sensor_loop(), self._deck_worker(), self.devices.run(), serial_reader(self.on_bell, self.contact_edge, self._push_bell))]
+            self._sensor_loop(), self._deck_worker(), self.devices.run(),
+            serial_reader(self.on_bell, self.contact_edge, self._push_bell),
+            wifi_reader(self.on_bell, self.contact_edge, self._push_bell))]
         for task in self._tasks:
             task.add_done_callback(_log_crash)
         self.request_deck("startup")
@@ -184,7 +186,8 @@ class Hub:
     def _bell_state(self) -> dict:
         return {"hold_ms": config.HOLD_MS, "repeat_gap_ms": config.REPEAT_GAP_MS,
                 "rapid_min": config.RAPID_MIN_PRESSES, "serial": dict(SERIAL_STATUS),
-                "serial_enabled": bool(config.BELL_SERIAL_PORT)}
+                "serial_enabled": bool(config.BELL_SERIAL_PORT),
+                "wifi": dict(WIFI_STATUS), "wifi_enabled": bool(config.BELL_WIFI_HOST)}
 
     async def _push_bell(self) -> None:
         await self.push(bell=self._bell_state())

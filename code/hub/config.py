@@ -36,6 +36,8 @@ MIN_EVENT_MS = int(_env("BELL_MIN_EVENT_MS", "30"))   # shorter contacts are bou
 RAPID_MIN_PRESSES = int(_env("BELL_RAPID_MIN", "3"))  # burst of this many presses = RAPID (SOS)
 BELL_SERIAL_PORT = _env("BELL_SERIAL_PORT", "")       # "auto", or e.g. /dev/cu.usbserial-0001; empty = Enter key only
 BELL_SERIAL_BAUD = int(_env("BELL_SERIAL_BAUD", "115200"))
+BELL_WIFI_HOST = _env("BELL_WIFI_HOST", "")         # e.g. ding-bell.local or the board's IP; empty = USB / Enter only
+BELL_WIFI_PORT = int(_env("BELL_WIFI_PORT", "8023"))
 
 # --- Room ESP32 (room_esp32/room_esp32.ino): light, TV, SOS over Wi-Fi ----------
 ROOM_ESP32_URL = _env("ROOM_ESP32_URL", "")          # e.g. http://ding-room.local; empty = simulated

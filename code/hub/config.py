@@ -37,6 +37,11 @@ RAPID_MIN_PRESSES = int(_env("BELL_RAPID_MIN", "3"))  # burst of this many press
 BELL_SERIAL_PORT = _env("BELL_SERIAL_PORT", "")       # "auto", or e.g. /dev/cu.usbserial-0001; empty = Enter key only
 BELL_SERIAL_BAUD = int(_env("BELL_SERIAL_BAUD", "115200"))
 
+# --- Room ESP32 (room_esp32/room_esp32.ino): light, TV, SOS over Wi-Fi ----------
+ROOM_ESP32_URL = _env("ROOM_ESP32_URL", "")          # e.g. http://ding-room.local; empty = simulated
+ROOM_HEARTBEAT_S = float(_env("ROOM_HEARTBEAT_S", "3"))  # resend the whole state this often
+ROOM_TIMEOUT_S = float(_env("ROOM_TIMEOUT_S", "1.5"))
+
 # --- Voice out --------------------------------------------------------------
 # The user's voice: OpenAI TTS (cheapest model), cached on disk so repeated phrases cost nothing
 # and play instantly. If audio isn't ready within TTS_MAX_WAIT_S, the local voice speaks instead.

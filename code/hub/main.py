@@ -54,7 +54,7 @@ class Hub:
         self.brain = Brain(self.profile)
         self.health = HealthMock()
         self.env = EnvironmentMock()
-        self.devices = Devices()
+        self.devices = Devices(on_link=self._push_room)
         self.voice = Voice(self.profile)
         self.stt = Transcriber(self.profile)
         self.face = FaceSensor(self._face_from_thread)
@@ -106,7 +106,7 @@ class Hub:
         self._log_file = open(config.LOG_DIR / f"events-{datetime.now():%Y%m%d}.jsonl", "a")
         self.face.start()
         self._tasks = [asyncio.ensure_future(c) for c in (
-            self._sensor_loop(), self._deck_worker(), serial_reader(self.on_bell, self.contact_edge, self._push_bell))]
+            self._sensor_loop(), self._deck_worker(), self.devices.run(), serial_reader(self.on_bell, self.contact_edge, self._push_bell))]
         for task in self._tasks:
             task.add_done_callback(_log_crash)
         self.request_deck("startup")
@@ -138,6 +138,7 @@ class Hub:
             "env": self.env.snapshot(),
             "face": self.face.snapshot(),
             "devices": self.devices.snapshot(),
+            "room": self.devices.link,
             "deck": self.deck,
             "keyboard": self.kb,
             "chat": self.chat,
@@ -170,7 +171,12 @@ class Hub:
             self.clients.discard(ws)
 
     async def push(self, **partial) -> None:
+        if "alert" in partial:  # the room's SOS lamp + buzzer follow the on-screen alert
+            self.devices.set_alarm(self.alert)
         await self.send({"type": "state", "data": partial})
+
+    async def _push_room(self) -> None:
+        await self.push(devices=self.devices.snapshot(), room=self.devices.link)
 
     def _bell_state(self) -> dict:
         return {"hold_ms": config.HOLD_MS, "repeat_gap_ms": config.REPEAT_GAP_MS,

@@ -40,7 +40,7 @@ export default function SimPanel({ hub }) {
     cur.has(name) ? cur.delete(name) : cur.add(name)
     send({ type: 'present', names: people.filter((p) => cur.has(p)) })
   }
-  const { health, env, face, devices, alert, deck, llm, settings, scenarios, bell } = state
+  const { health, env, face, devices, room, alert, deck, llm, settings, scenarios, bell } = state
   const theme = settings?.theme || 'auto'
   const on = (cond) => `btn ${cond ? 'is-on' : ''}`
 
@@ -140,6 +140,10 @@ export default function SimPanel({ hub }) {
             <button className="btn" onClick={() => { setHhmm(''); send({ type: 'sim_time', hhmm: null }) }}>Real time</button>
           </div>
           <h3>Devices</h3>
+          <p><span className={`dot ${room?.connected ? 'ok' : 'bad'}`} />{' '}
+            {room?.connected ? `Room ESP32 at ${room.url}`
+              : room?.url ? `Room ESP32 not reachable at ${room.url} (simulated until it answers)`
+              : 'Room ESP32 off: set ROOM_ESP32_URL (light and TV simulated)'}</p>
           <div className="btns">
             {Object.entries(devices || {}).map(([k, d]) => {
               const Icon = DEVICE_ICON[k] || Lamp

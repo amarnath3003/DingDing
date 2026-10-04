@@ -8,6 +8,7 @@ opencv-python
 mediapipe
 numpy
 pyserial
+httpx  # room ESP32 (also comes with openai)
 # Flashing the bell ESP32 (bell_esp32/main.py)
 esptool
 mpremote

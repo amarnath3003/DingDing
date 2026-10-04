@@ -156,7 +156,7 @@ flowchart LR
 | User's voice / hearing people | **Real** (OpenAI TTS / STT, mic off by default) |
 | Heart rate, SpO₂, BP, temperature | *Simulated, with scenarios* |
 | Room temperature, humidity, light, noise, CO₂ | *Simulated, with scenarios* |
-| Light + TV | *Simulated* (`hub/devices.py::_apply` is where the 2nd ESP32 goes) |
+| Light + TV + SOS alarm | **Real** with the room ESP32 over Wi-Fi ([`room_esp32/`](room_esp32)), otherwise *simulated* |
 | Learning from picks | *Next iteration* (events are already logged) |
 
 Everything simulated is labelled **Simulated** on screen. The persona (Ravi, 54, retired headmaster) is illustrative only.
@@ -185,6 +185,7 @@ cd code && ../.venv/bin/python -m tests.selftest     # offline checks: gestures,
 code/hub/        Python hub: bell gestures, AI brain, voice, face, mocks, WebSocket
 code/ui/         React Bell Screen + operator panel
 bell_esp32/      ESP32 firmware (MicroPython + Arduino) and the contact tester
+room_esp32/      room ESP32 (Wi-Fi): green LED = light, OLED = TV, red LED + buzzer = SOS
 bell_raw/        raw edge logger used to tune the bell debounce
 bell_test/       first bell gesture firmware (Arduino)
 docs/            full concept (report.md), demo plan (demo.md), images

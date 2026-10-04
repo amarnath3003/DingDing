@@ -170,8 +170,58 @@ async def hung_llm_cases():
              d["source"] == "local" and len(d["cards"]) >= 4 and took < 3, (d["source"], round(took, 2)))]
 
 
+async def room_cases():
+    """Room ESP32 link: full state on change, SOS follows the alert, drops are reported."""
+    import httpx
+    from hub.devices import Devices
+
+    sent, up = [], [True]
+
+    def handler(req):
+        if not up[0]:
+            raise httpx.ConnectError("board off", request=req)
+        sent.append(dict(req.url.params))
+        return httpx.Response(200, json={})
+
+    real = config.ROOM_ESP32_URL, config.ROOM_HEARTBEAT_S
+    config.ROOM_ESP32_URL, config.ROOM_HEARTBEAT_S = "http://room.test/", 0.3
+    links = []
+    try:
+        dev = Devices()
+        dev.on_link = lambda: asyncio.sleep(0, links.append(dev.link["connected"]))
+        task = asyncio.ensure_future(dev.run(httpx.MockTransport(handler)))
+        await dev.set("light", True)
+        await asyncio.sleep(0.05)
+        light = sent[-1] if sent else None
+        dev.set_alarm({"kind": "help", "acknowledged_by": None})
+        await asyncio.sleep(0.05)
+        sos = sent[-1]["sos"]
+        dev.set_alarm({"kind": "help", "acknowledged_by": "Lakshmi"})
+        await asyncio.sleep(0.05)
+        coming = sent[-1]["sos"]
+        dev.set_alarm({"kind": "checkin"})
+        await asyncio.sleep(0.05)
+        n = len(sent)
+        await asyncio.sleep(0.4)
+        heartbeat = len(sent) > n
+        up[0] = False
+        await asyncio.sleep(0.4)
+        dropped = dev.snapshot()["light"]["simulated"]
+        task.cancel()
+    finally:
+        config.ROOM_ESP32_URL, config.ROOM_HEARTBEAT_S = real
+    return [
+        ("room: change sends the whole state", light == {"light": "1", "tv": "0", "sos": "0"}, light),
+        ("room: help -> sos 1, I'm coming -> 2, check-in -> 0", (sos, coming, sent[-1]["sos"]) == ("1", "2", "0"),
+         (sos, coming, sent[-1]["sos"])),
+        ("room: heartbeat resends", heartbeat, len(sent)),
+        ("room: drop reported, devices fall back to simulated", links == [True, False] and dropped, (links, dropped)),
+    ]
+
+
 def main():
     cases = (asyncio.run(bell_cases()) + asyncio.run(serial_cases()) + asyncio.run(hung_llm_cases())
+             + asyncio.run(room_cases())
              + other_cases())
     bad = 0
     for name, ok, detail in cases:

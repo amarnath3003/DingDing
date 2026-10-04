@@ -167,5 +167,5 @@ HTTP: `POST /api/transcribe` (one WAV utterance; ignored unless `mic_on`), `GET 
   .venv/bin/mpremote connect $P cp bell_esp32/main.py :main.py + reset   # after every change to main.py
   ```
 - **ESP32-CAM:** `CAMERA_SOURCE=http://<cam-ip>:81/stream`.
-- **Light/TV ESP32:** implement `Devices._apply()` in `hub/devices.py`.
+- **Room ESP32 (light, TV, SOS) over Wi-Fi:** `room_esp32/room_esp32.ino` (Arduino, needs U8g2). Green LED on GPIO 26 = light, SH1106 OLED on 21/22 = TV, red LED on 27 + buzzer on 25 = SOS. Put the Wi-Fi name and password at the top of the sketch (2.4 GHz, same network as the laptop) and flash it. The OLED shows `READY` and its IP until the hub talks to it. Then set `ROOM_ESP32_URL=http://ding-room.local` (or `http://<ip>`). The hub sends `GET /state?light=0|1&tv=0|1&sos=0|1|2` on every change and every 3 s: help raised → `sos=1` (red blinks and beeps), "I'm coming" → `sos=2` (red blinks, buzzer quiet), cleared → `sos=0`. The sim panel shows whether the board answers. Power it from a USB charger, not the laptop: with `BELL_SERIAL_PORT=auto` the hub could pick the room board's serial port as the bell. Test by hand: `curl 'http://ding-room.local/state?tv=1&sos=1'`.
 - **Real sensors:** replace `HealthMock` / `EnvironmentMock` but keep their `snapshot()` shape.

@@ -34,6 +34,27 @@ EYES_CLOSED_S = 2.0     # eyes shut this long -> pause scanning
 AWAY_S = 1.5            # face turned / missing this long -> pause scanning
 LABEL_HOLD_S = 0.8      # a new label must stay on top this long before it's reported
 PUBLISH_EVERY_S = 0.25
+PREVIEW_WIDTH = 320       # the preview is a glance, not a video: small, rough and slow is fine
+PREVIEW_EVERY_S = 0.2     # ~5 fps
+PREVIEW_QUALITY = 45      # JPEG quality, ~5 KB a frame
+
+# Preview overlay colours (BGR), from the screen palette: mesh in cream, features in clay, irises in green.
+MESH_BGR, FEATURE_BGR, IRIS_BGR = (120, 128, 132), (79, 119, 217), (155, 194, 143)
+_mesh_lines: Optional[dict] = None  # MediaPipe face-mesh connections, loaded with mediapipe
+
+
+def _connections() -> dict:
+    global _mesh_lines
+    if _mesh_lines is None:
+        from mediapipe.tasks.python.vision import FaceLandmarksConnections as C
+        pairs = lambda conns: [(c.start, c.end) for c in conns]
+        _mesh_lines = {
+            "mesh": pairs(C.FACE_LANDMARKS_TESSELATION),
+            "features": pairs(C.FACE_LANDMARKS_FACE_OVAL + C.FACE_LANDMARKS_LEFT_EYE + C.FACE_LANDMARKS_RIGHT_EYE
+                              + C.FACE_LANDMARKS_LEFT_EYEBROW + C.FACE_LANDMARKS_RIGHT_EYEBROW + C.FACE_LANDMARKS_LIPS),
+            "irises": pairs(C.FACE_LANDMARKS_LEFT_IRIS + C.FACE_LANDMARKS_RIGHT_IRIS),
+        }
+    return _mesh_lines
 
 
 def _avg(bs: Dict[str, float], *names: str) -> float:
@@ -78,6 +99,7 @@ class FaceSensor:
         self.override: Optional[str] = None  # set from the sim panel; wins over the camera
         self.preview_clients = 0
         self.latest_jpeg: Optional[bytes] = None
+        self._last_preview = 0.0
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._baseline: Dict[str, float] = {}
@@ -166,8 +188,9 @@ class FaceSensor:
                     result = landmarker.detect_for_video(
                         mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), ts)
                     self._process(result)
-                    if self.preview_clients > 0:
-                        self._make_preview(cv2, frame)
+                    if self.preview_clients > 0 and time.monotonic() - self._last_preview >= PREVIEW_EVERY_S:
+                        self._last_preview = time.monotonic()
+                        self._make_preview(cv2, frame, result.face_landmarks[0] if result.face_landmarks else None)
                     time.sleep(0.03)  # ~15-20 fps is plenty
                 cap.release()
 
@@ -256,12 +279,26 @@ class FaceSensor:
             "scores": {k: round(v, 2) for k, v in ema.items()},
         }
 
-    def _make_preview(self, cv2, frame) -> None:
+    def _make_preview(self, cv2, frame, landmarks=None) -> None:
+        """Mirrored frame with the MediaPipe face mesh and the current reading drawn on it."""
         h, w = frame.shape[:2]
-        small = cv2.resize(cv2.flip(frame, 1), (320, int(320 * h / w)))
+        pw, ph = PREVIEW_WIDTH, int(PREVIEW_WIDTH * h / w)
+        small = cv2.resize(cv2.flip(frame, 1), (pw, ph), interpolation=cv2.INTER_AREA)
+        if landmarks:
+            pts = [(int((1 - p.x) * pw), int(p.y * ph)) for p in landmarks]  # mirrored like the frame
+            lines = _connections()
+            for a, b in lines["mesh"]:  # thin and grey, no anti-aliasing: cheap, and the face stays readable
+                cv2.line(small, pts[a], pts[b], MESH_BGR, 1)
+            for a, b in lines["features"]:
+                cv2.line(small, pts[a], pts[b], FEATURE_BGR, 1, cv2.LINE_AA)
+            for a, b in lines["irises"]:
+                if a < len(pts) and b < len(pts):
+                    cv2.line(small, pts[a], pts[b], IRIS_BGR, 1, cv2.LINE_AA)
         snap = self.snapshot()
-        cv2.putText(small, f"{snap['label']} {snap['confidence']:.2f} | {snap['attention']}",
-                    (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (80, 255, 120), 2)
-        ok, jpg = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        text = f"{snap['label']} {snap['confidence']:.2f}  |  {snap['attention'].replace('_', ' ')}"
+        cv2.rectangle(small, (0, ph - 22), (pw, ph), (28, 30, 31), -1)
+        cv2.putText(small, text if landmarks else "no face found", (8, ph - 7),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (230, 236, 240), 1, cv2.LINE_AA)
+        ok, jpg = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, PREVIEW_QUALITY])
         if ok:
             self.latest_jpeg = jpg.tobytes()

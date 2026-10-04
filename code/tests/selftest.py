@@ -90,6 +90,10 @@ def other_cases():
     d = brain._finish_deck(brain.local_deck(ctx, []), "local", ctx)
     cases.append(("local deck uses face + dark room", d["cards"][0]["text"].startswith("I'm tired")
                   and any(c["device"] == "light" for c in d["cards"]), [c["text"] for c in d["cards"]]))
+    hub_ctx = {**ctx, "room": {"room_temp": "32.4°C (hot)", "light": "20 lux (dark)", "humidity": "58%"}}
+    d = brain._finish_deck(brain.local_deck(hub_ctx, []), "local", hub_ctx)
+    cases.append(("local deck reads the hub's room text (\"32.4°C (hot)\")", any("hot" in c["text"] for c in d["cards"])
+                  and any(c["device"] == "light" for c in d["cards"]), [c["text"] for c in d["cards"]]))
     ctx.update(part_of_day="night", devices={"light": "off", "tv": "off"})
     d = brain._finish_deck(brain.local_deck(ctx, []), "local", ctx)
     cases.append(("no device card for a device already off", all(c["device"] == "none" for c in d["cards"]),

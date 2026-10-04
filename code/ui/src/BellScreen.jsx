@@ -3,7 +3,7 @@ import { useScanner } from './useScanner.js'
 import { useListener } from './useListener.js'
 import {
   Check, ChevronRight, ConciergeBell, Delete, Ellipsis, Eye, HeartHandshake, History, Keyboard, Lamp, Laugh, LifeBuoy,
-  MessageSquare, Mic, MicOff, Moon, RotateCcw, Send, Shuffle, Space, Sparkles, Tv, Undo2, Volume2, X,
+  MessageSquare, Mic, MicOff, Moon, MoonStar, RotateCcw, Send, Shuffle, Space, Sparkles, Sun, Tv, Undo2, Volume2, X,
 } from 'lucide-react'
 import Sidebar from './Sidebar.jsx'
 
@@ -73,6 +73,9 @@ export default function BellScreen({ hub }) {
   })
   const someoneTalking = listener.status === 'hearing' || listener.status === 'sending' || !!state?.stt_status?.busy
   const toggleMic = useCallback(() => send({ type: 'settings', mic_on: !settings.mic_on }), [send, settings.mic_on])
+  // Dark mode: 'auto' follows the time of day; the switch (sidebar or More menu) pins the opposite of what's showing.
+  const night = settings.theme === 'dark' || (settings.theme !== 'light' && state?.env?.part_of_day === 'night')
+  const toggleTheme = useCallback(() => send({ type: 'settings', theme: night ? 'light' : 'dark' }), [send, night])
 
   const attentionPause =
     settings.pause_on_attention !== false && face?.source === 'camera' && face?.status === 'running'
@@ -239,12 +242,14 @@ export default function BellScreen({ hub }) {
         { id: 'g:room', label: 'Room', icon: Lamp, children: devices },
         { id: 'mic', label: settings.mic_on ? 'Turn microphone off' : 'Turn microphone on', icon: settings.mic_on ? MicOff : Mic,
           onSelect: toggleMic },
+        { id: 'theme', label: night ? 'Turn dark mode off' : 'Turn dark mode on', icon: night ? Sun : MoonStar,
+          onSelect: toggleTheme },
         { id: 'rest', label: 'Rest', icon: Moon, onSelect: () => goIdle('rest'), after: 'none' },
       ] },
       { id: 'help', label: 'Help', icon: LifeBuoy, tile: true, danger: true, onSelect: () => send({ type: 'help' }) },
     )
     return nodes
-  }, [state, mode, deck, draft, alert.kind, inConversation, settings.mic_on, send, setDraft, goIdle, toggleMic, refineCard, refineGaveUp, kbTarget, openKeyboard, speakDraft])
+  }, [state, mode, deck, draft, alert.kind, inConversation, settings.mic_on, night, send, setDraft, goIdle, toggleMic, toggleTheme, refineCard, refineGaveUp, kbTarget, openKeyboard, speakDraft])
 
   const cycleMs = Math.max(1, root.length) * dwell
   const scanner = useScanner({
@@ -431,7 +436,6 @@ export default function BellScreen({ hub }) {
     }
   }), [onEvent])
 
-  const night = settings.theme === 'dark' || (settings.theme !== 'light' && state?.env?.part_of_day === 'night')
   if (!state) {
     return <div className="app" data-theme="light"><div className="connecting">{connected ? 'Loading…' : 'Connecting to Ding.AI…'}</div></div>
   }
@@ -457,7 +461,7 @@ export default function BellScreen({ hub }) {
 
   return (
     <div className="app" data-theme={night ? 'dark' : 'light'}>
-      <Sidebar state={state} connected={connected} listener={listener} onToggleMic={toggleMic} />
+      <Sidebar state={state} connected={connected} listener={listener} onToggleMic={toggleMic} night={night} onToggleTheme={toggleTheme} />
       <div className="main">
         {mode !== 'idle' && (
           <header className="convo-title">

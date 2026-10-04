@@ -835,7 +835,7 @@ async def camera_preview():
                 jpg = hub.face.latest_jpeg
                 if jpg:
                     yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpg + b"\r\n"
-                await asyncio.sleep(0.15)
+                await asyncio.sleep(0.2)  # matches face.PREVIEW_EVERY_S
         finally:
             hub.face.preview_clients -= 1
     return StreamingResponse(frames(), media_type="multipart/x-mixed-replace; boundary=frame")

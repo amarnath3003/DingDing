@@ -105,6 +105,11 @@ button { font: inherit; color: inherit; }
 .side-row { display: flex; align-items: center; gap: 10px; padding: clamp(2px, .55vh, 5px) 0; font-size: 15px; }
 .side-row svg { color: var(--text-3); flex: none; }
 .side-row .val { margin-left: auto; color: var(--text-2); }
+.side-row.has-cam { cursor: zoom-in; }
+.cam-pop { position: fixed; z-index: 50; width: 336px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 8px; pointer-events: none; animation: cam-in .15s var(--ease); }
+.cam-pop img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border-radius: var(--r); background: var(--sunk); }
+.cam-pop p { margin: 6px 4px 2px; font-size: 13px; color: var(--text-3); }
+@keyframes cam-in { from { opacity: 0; transform: translateX(-4px); } }
 .side-row .val.on { color: var(--accent-ink); font-weight: 600; }
 .side-row .val.warn { color: var(--warn); font-weight: 600; }
 .side-row .val.critical { color: var(--crit); font-weight: 700; }
@@ -242,7 +247,7 @@ button { font: inherit; color: inherit; }
   .side-group, .side-when { display: none; }
   .side-foot { margin: 0 0 0 auto; flex-direction: row; align-items: center; }
   .switch { width: auto; padding: 7px 10px; }
-  .switch .mic-text { display: none; }
+  .switch .switch-text { display: none; }
   .status-text { display: none; }
   .main { height: auto; min-height: 0; }
   .column, .composer-wrap { padding-left: 16px; padding-right: 16px; }

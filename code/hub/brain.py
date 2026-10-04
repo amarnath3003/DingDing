@@ -314,7 +314,7 @@ class Brain:
         elif face == "sad":
             say("Can you sit with me for a while?", 0.25)
 
-        room = ctx.get("room", {})
+        room = {k: _num(v) for k, v in ctx.get("room", {}).items()}  # the hub sends "27.0°C", "20 lux (dark)"
         on = {k: v == "on" for k, v in ctx.get("devices", {}).items()}
         temp = room.get("room_temp")
         if temp is not None and temp >= 31:
@@ -322,7 +322,8 @@ class Brain:
         elif temp is not None and temp <= 20:
             say("I'm cold, can I have a blanket?", 0.25)
         part = ctx.get("part_of_day", "afternoon")
-        if room.get("light", 999) < 60 and not on.get("light") and part != "night":
+        lux = room.get("light")
+        if lux is not None and lux < 60 and not on.get("light") and part != "night":
             do("It's dark. Turn the light on, please.", "light", True, 0.25)
         if part == "night" and on.get("light"):
             do("Turn the light off, please. I want to sleep.", "light", False, 0.2)
@@ -411,6 +412,14 @@ def _keeps_draft(draft: str, text: str) -> bool:
     if t[:len(whole)] != [re.sub(r"[^\w]", "", w) for w in whole]:
         return False
     return not last or (len(t) > len(whole) and t[len(whole)].startswith(last))
+
+
+def _num(v) -> Optional[float]:
+    """A reading as a number, whether it arrives as 27.0 or as "27.0°C (warm)"."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    m = re.match(r"\s*(-?\d+(?:\.\d+)?)", str(v))
+    return float(m.group(1)) if m else None
 
 
 def _norm(text: str) -> str:

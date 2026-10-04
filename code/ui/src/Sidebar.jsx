@@ -1,4 +1,4 @@
-import { ConciergeBell, Eye, Gauge, HeartPulse, House, Lamp, Mic, MicOff, Thermometer, Tv, Users, Wind } from 'lucide-react'
+import { ConciergeBell, Eye, Gauge, HeartPulse, History, House, Lamp, Mic, MicOff, Thermometer, Tv, Users, Wind } from 'lucide-react'
 
 // Quiet context beside the conversation. The user never navigates here; it is
 // for the people in the room. Everything simulated is labelled as such.
@@ -15,7 +15,7 @@ const MIC_TEXT = {
 }
 
 export default function Sidebar({ state, connected, listener, onToggleMic }) {
-  const { env, health, face, devices, present, llm, settings } = state
+  const { env, health, face, devices, present, llm, settings, memory } = state
   const v = health?.vitals || {}
   const micOn = !!settings?.mic_on
   const micState = state.stt_status?.busy && listener?.status === 'listening' ? 'sending' : listener?.status || 'off'
@@ -75,6 +75,13 @@ export default function Sidebar({ state, connected, listener, onToggleMic }) {
           {face?.source === 'override' && <span className="sim-tag">Simulated</span>}
         </div>
       </section>
+
+      {memory?.enabled && (
+        <section className="side-group">
+          <h3>Learning</h3>
+          <div className="side-row"><History size={17} /> Phrases learned <span className="val">{memory.phrases}</span></div>
+        </section>
+      )}
 
       <div className="side-foot">
         <button

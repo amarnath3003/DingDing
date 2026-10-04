@@ -35,7 +35,7 @@ The bell is the only input; the AI supplies the bandwidth. The user supplies the
 - Options must never change while they are being scanned; Help is always reachable within the main loop.
 - The user cannot use a mouse, touch, or keyboard. Anything on the user's screen is reached only by scanning.
 - Frontend: React + Vite (`code/ui`), hub over one WebSocket (`code/hub`). A teammate is building a parallel control-centre UI against the same protocol.
-- No learning from picks yet (planned for a later iteration).
+- Learns from picks (`code/hub/memory.py`): past choices return first in similar moments, marked Learned. Stored on this machine only.
 
 ## Brand Commitments
 

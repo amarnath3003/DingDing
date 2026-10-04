@@ -3,11 +3,13 @@ import asyncio
 import json
 import sys
 import types
+from pathlib import Path
 
 from hub import config
 from hub import bell as bell_mod
 from hub.bell import GestureClassifier, parse_firmware_line
 from hub.brain import Brain, local_keyboard
+from hub.memory import Memory, moment_from
 
 
 async def bell_cases():
@@ -219,10 +221,65 @@ async def room_cases():
     ]
 
 
+def memory_cases():
+    import tempfile
+    cases = []
+    path = Path(tempfile.mkdtemp()) / "memory.json"
+    mem = Memory(path)
+    people = ["Lakshmi"]
+    asked = lambda text: {"time": "08:10", "part_of_day": "morning", "devices": {"light": "off", "tv": "off"},
+                          "face": {"label": "neutral"}, "health": {"overall": "normal"}, "conversation": [],
+                          "waiting_for_answer": {"who": "Lakshmi", "text": text, "secs_ago": 2}}
+    ai = lambda texts: [{"text": t, "kind": "say", "device": "none", "device_on": False, "tone": "neutral",
+                         "p": 0.25, "id": f"x{i}"} for i, t in enumerate(texts)]
+    deck = ai(["Coffee, please.", "Tea, please.", "Neither, thanks.", "Just water."])
+
+    mem.learn({"text": "Filter coffee, strong, no sugar.", "kind": "say"}, moment_from(asked("Tea or coffee?"), people),
+              "card", rank=3)
+    ctx = asked("Appa, do you want tea or coffee?")
+    out = mem.shape(deck, mem.recall(ctx, people), ctx)
+    cases.append(("learned answer to a reworded question comes first", out[0]["text"] == "Filter coffee, strong, no sugar."
+                  and out[0].get("learned") and len(out) == 4, [c["text"] for c in out]))
+    other = asked("Shall I call the doctor?")
+    cases.append(("learned answer not recalled for an unrelated question", not mem.recall(other, people),
+                  mem.recall(other, people)))
+    mem2 = Memory(path)
+    cases.append(("memory survives a restart", mem2.recall(ctx, people)
+                  and mem2.recall(ctx, people)[0]["entry"]["text"].startswith("Filter coffee"), None))
+
+    idle = {**asked(""), "waiting_for_answer": None, "time": "19:05", "part_of_day": "evening"}
+    light = {"text": "Turn the light on, please.", "kind": "say_and_do", "device": "light", "device_on": True}
+    mem.learn(light, moment_from(idle, people), "card", rank=2)
+    cases.append(("one idle pick: hinted to the AI, not forced", [c["text"] for c in mem.shape(deck, mem.recall(idle, people), idle)]
+                  == [c["text"] for c in deck] and mem.recall(idle, people), None))
+    key = mem.learn(light, moment_from(idle, people), "card", rank=1)
+    out = mem.shape(deck, mem.recall(idle, people), idle)
+    cases.append(("habit used twice goes on screen", out[0]["text"] == "Turn the light on, please."
+                  and out[0]["device"] == "light", [c["text"] for c in out]))
+    lit = {**idle, "devices": {"light": "on", "tv": "off"}}
+    cases.append(("no 'light on' habit while the light is on", not mem.recall(lit, people), None))
+    mem.unlearn(key)
+    cases.append(("undo forgets the pick", len(mem.phrases[next(k for k in mem.phrases if "light" in k)]["uses"]) == 1, None))
+    mem.learn(light, moment_from(idle, people), "card", rank=1)
+    mem.skip(["Turn the light on, please."] * 3)
+    out = mem.shape(deck, mem.recall(idle, people), idle)
+    cases.append(("scanned-past habits fade off the screen", out[0]["text"] == "Coffee, please.", [c["text"] for c in out]))
+
+    mem.learn({"text": "Tell Arjun the Kaveri story tonight."}, moment_from(idle, people), "keyboard")
+    profile = json.loads(config.PROFILE_PATH.read_text())
+    kb = local_keyboard("tell ar", profile, mem.sentences(), mem.top_words())
+    cases.append(("keyboard offers the user's own sentence and words", "Tell Arjun the Kaveri story tonight." in kb["completions"]
+                  and "kaveri" in local_keyboard("tell arjun the ka", profile, mem.sentences(), mem.top_words())["next_words"], kb))
+    crit = {**ctx, "health": {"overall": "critical"}}
+    out = mem.shape(deck, mem.recall(crit, people), crit)
+    cases.append(("critical vitals: habits never pushed to the top", out[0]["text"] == "Coffee, please.", [c["text"] for c in out]))
+    return cases
+
+
 def main():
     cases = (asyncio.run(bell_cases()) + asyncio.run(serial_cases()) + asyncio.run(hung_llm_cases())
              + asyncio.run(room_cases())
-             + other_cases())
+             + other_cases() + memory_cases())
     bad = 0
     for name, ok, detail in cases:
         print(("PASS " if ok else "FAIL ") + name + ("" if ok else f"   -> {detail}"))

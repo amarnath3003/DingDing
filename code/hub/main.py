@@ -30,6 +30,7 @@ from .devices import Devices
 from .environment import SCENARIOS as ENV_SCENARIOS, EnvironmentMock
 from .face import LABELS as FACE_LABELS, FaceSensor
 from .health import SCENARIOS as HEALTH_SCENARIOS, HealthMock
+from .memory import Memory, moment_from
 from .stt import Transcriber
 from .tts import OPENAI_VOICES, Voice
 
@@ -52,6 +53,7 @@ class Hub:
     def __init__(self):
         self.profile = json.loads(config.PROFILE_PATH.read_text())
         self.brain = Brain(self.profile)
+        self.memory = Memory()  # learns from every pick; grows more useful the longer it's used
         self.health = HealthMock()
         self.env = EnvironmentMock()
         self.devices = Devices(on_link=self._push_room)
@@ -85,7 +87,7 @@ class Hub:
         self.undo_phrase = (book.get("undo") or ["Sorry, wrong one. Ignore that."])[0]
         self.speaking = {"active": False, "text": ""}
         self.deck = self.brain._finish_deck({"cards": []}, "local", {})
-        self.kb = {"draft": "", **self.brain.local_keyboard(""), "source": "local"}
+        self.kb = {"draft": "", **self._local_keyboard(""), "source": "local"}
 
         self._deck_wakeup = asyncio.Event()
         self._deck_avoid: list = []
@@ -155,6 +157,7 @@ class Hub:
             "voices": OPENAI_VOICES,
             "undo_window_s": config.UNDO_WINDOW_S,
             "refine": self.refine,
+            "memory": self.memory.stats(),
             "bell": self._bell_state(),
             "tts_in_browser": not self.voice.available,
             "scenarios": {"health": list(HEALTH_SCENARIOS), "env": list(ENV_SCENARIOS), "face": list(FACE_LABELS)},
@@ -267,6 +270,10 @@ class Hub:
             "rejected": self._rejected(),
             "draft": self.draft,
         }
+        # What the user chose before in moments like this one (their words, their habits).
+        learned = self.memory.recall(ctx, self.present)
+        if learned:
+            ctx["learned"] = self.memory.for_ai(learned)
         if self.draft_for == "chat" and self.ui_mode == "keyboard":  # typing to Ask AI, not to the room
             ctx["draft_for"] = ("a private message to Ding.AI, the assistant, in the Ask AI chat: not spoken to anyone "
                                 "in the room. Usually an answer to chat_last.")
@@ -310,6 +317,9 @@ class Hub:
         await self.push(deck_status={"loading": True, "reasons": reasons})
         t0 = time.monotonic()
         deck = await self.brain.deck(ctx, avoid)
+        recall_ctx = {**ctx, "rejected": (ctx.get("rejected") or []) + list(avoid or [])}
+        deck["cards"] = self.memory.shape(deck["cards"], self.memory.recall(recall_ctx, self.present),
+                                          ctx, local=deck["source"] == "local")
         deck["reasons"] = reasons
         deck["latency_ms"] = round((time.monotonic() - t0) * 1000)
         self.deck = deck
@@ -319,19 +329,23 @@ class Hub:
         self.voice.prefetch((c["text"], c["tone"]) for c in deck["cards"][:config.TTS_PREFETCH]
                             if c["kind"] in ("say", "say_and_do"))
         self.log_event("deck", source=deck["source"], reasons=reasons, latency_ms=deck["latency_ms"],
-                       cards=[c["text"] for c in deck["cards"]])
+                       cards=[c["text"] for c in deck["cards"]],
+                       learned=[c["text"] for c in deck["cards"] if c.get("learned")])
         await self.push(deck=deck, deck_status={"loading": False}, llm=self.brain.status)
 
     # --- keyboard predictions: local instantly, AI shortly after -----------------
     async def on_draft(self, draft: str, target: str = "say") -> None:
         self.draft = draft
         self.draft_for = "chat" if target == "chat" else "say"
-        local = self.brain.local_keyboard(draft)
+        local = self._local_keyboard(draft)
         self.kb = {"draft": draft, **local, "source": "local"}
         await self.push(keyboard=self.kb)
         if self._kb_task and not self._kb_task.done():
             self._kb_task.cancel()
         self._kb_task = asyncio.ensure_future(self._kb_ai(draft, local))
+
+    def _local_keyboard(self, draft: str) -> dict:
+        return self.brain.local_keyboard(draft, self.memory.sentences(), self.memory.top_words())
 
     async def _kb_ai(self, draft: str, local: dict) -> None:
         await asyncio.sleep(0.35)  # wait for the user to settle on a letter
@@ -389,14 +403,19 @@ class Hub:
         if not text:
             return
         now = time.time()
+        learned_key = None
+        if source in ("keyboard", "scan"):  # cards are learned in select_card, with their device and rank
+            learned_key = self.memory.learn({"text": text, "kind": "say", "tone": tone}, self._moment(), source)
         self.recent.append({"text": text, "t": now, "kind": "said"})
         self.recent = self.recent[-20:]
         self.log_event("say", text=text, source=source, tone=tone)
         self.speaking = {"active": True, "text": text, "engine": None, "at": now}
         if undoable:
-            self.last_action = {"text": text, "t": now, "device": device_change, "spoken": True}
+            self.last_action = {"text": text, "t": now, "device": device_change, "spoken": True,
+                                "learned": learned_key}
         await self.push(speaking=self.speaking, last_said={"text": text, "at": now},
-                        last_action=self._last_action_out(), transcript=self._transcript())
+                        last_action=self._last_action_out(), transcript=self._transcript(),
+                        **({"memory": self.memory.stats()} if learned_key else {}))
         if not self.voice.available:
             await self.send({"type": "speak", "text": text})
         asyncio.ensure_future(self._speak(text, tone))
@@ -435,10 +454,15 @@ class Hub:
                         **({"done": done} if done else {}))
         self.request_deck("device")
 
+    def _moment(self) -> dict:
+        """Where a pick was made (clock, people, what was just asked, face): what learning ties it to."""
+        return moment_from(self.context(), self.present)
+
     async def select_card(self, card: dict) -> None:
         kind, device = card.get("kind", "say"), card.get("device", "none")
         self.log_event("select", text=card.get("text"), kind=kind, device=device,
-                       deck_source=self.deck.get("source"), rank=card.get("rank"))
+                       deck_source=self.deck.get("source"), rank=card.get("rank"), learned=bool(card.get("learned")))
+        moment = self._moment()  # before saying it: afterwards the question counts as answered
         change = None
         if device in self.devices.state and kind in ("do", "say_and_do"):
             change = {"name": device, "prev": self.devices.state[device]}
@@ -448,6 +472,12 @@ class Hub:
         else:
             self.recent.append({"text": card["text"], "t": time.time(), "kind": "did"})
             await self.push(transcript=self._transcript())
+        key = self.memory.learn(card, moment, "card", rank=card.get("rank"))
+        if card.get("refined_from"):  # "close, but not quite": that wording fits less than we thought
+            self.memory.skip([card["refined_from"]], 0.5)
+        if key and self.last_action and time.time() - self.last_action["t"] < 2:
+            self.last_action["learned"] = key
+        await self.push(memory=self.memory.stats())
 
     async def start_refine(self, card: dict) -> None:
         """HOLD on a card: close, but not right. Offer variations of it (the screen pauses until they arrive)."""
@@ -485,6 +515,8 @@ class Hub:
         if not a:
             return
         self.last_action = None
+        if a.get("learned"):  # a mistake teaches nothing
+            self.memory.unlearn(a["learned"])
         was_speaking = self.voice.playing() and self.speaking.get("text") == a["text"]
         await self.voice.stop()
         if a.get("device"):
@@ -495,7 +527,7 @@ class Hub:
         self.recent = [r for r in self.recent if not (r["text"] == a["text"] and abs(r["t"] - a["t"]) < 1)]
         self.speaking = {"active": False, "text": "", "engine": None}
         await self.push(speaking=self.speaking, last_action=None, undone={"text": a["text"], "at": time.time()},
-                        transcript=self._transcript())
+                        transcript=self._transcript(), memory=self.memory.stats())
         if a.get("spoken") and not was_speaking:
             # Already said out loud: tell the listener to disregard it.
             await self.say(self.undo_phrase, source="undo", undoable=False)
@@ -646,9 +678,12 @@ class Hub:
         elif t == "deck_refresh":
             avoid = msg.get("avoid") or [c["text"] for c in self.deck["cards"]]
             self.reject(avoid)
+            self.memory.skip(avoid, 0.5)
             self.request_deck("other_ideas", avoid=avoid)
         elif t == "deck_skipped":  # scanned past the whole deck twice without a ring
-            self.reject(msg.get("cards") or [c["text"] for c in self.deck["cards"]])
+            skipped = msg.get("cards") or [c["text"] for c in self.deck["cards"]]
+            self.reject(skipped)
+            self.memory.skip(skipped, 0.5)
             self.log_event("deck_skipped", cards=msg.get("cards"))
             self.request_deck("skipped")
         elif t == "refine":
@@ -674,8 +709,8 @@ class Hub:
                 await self.on_heard(text, msg.get("speaker"), source="typed")
         elif t == "undo":
             await self.undo()
-        elif t == "clear_heard":
-            self.heard = []
+        elif t == "clear_heard":  # a new scene: both sides of the conversation, and what was scanned past in it
+            self.heard, self.recent, self.rejected = [], [], []
             await self.push(heard=[], transcript=self._transcript())
             self.request_deck("heard")
         elif t == "present":
@@ -704,6 +739,11 @@ class Hub:
             self.voice.set_voice(self.settings["tts_voice"])
             self.log_event("settings", **{k: v for k, v in msg.items() if k != "type"})
             await self.push(settings=self.settings, tts=self.voice.stats)
+        elif t == "memory_reset":  # operator panel: forget everything learned
+            self.memory.reset()
+            self.log_event("memory_reset", source=msg.get("source", "operator"))
+            await self.push(memory=self.memory.stats())
+            self.request_deck("memory")
         elif t == "ui_event":  # scanner telemetry (view changes, pauses) for later metrics
             self.log_event("ui", **{("ui_" + k if k == "event" else k): v for k, v in msg.items() if k != "type"})
             if msg.get("event") == "mode":
@@ -774,6 +814,15 @@ async def api_transcribe(request: Request):
 async def api_context():
     """Exactly what the LLM sees right now (handy for debugging prompts)."""
     return JSONResponse(hub.context())
+
+
+@app.get("/api/memory")
+async def api_memory():
+    """What Ding.AI has learned, and what it would recall right now."""
+    ctx = hub.context()
+    return JSONResponse({**hub.memory.stats(top=30), "recall_now": [
+        {"text": it["entry"]["text"], "score": it["score"], "why": it["why"]}
+        for it in hub.memory.recall(ctx, hub.present, limit=10)]})
 
 
 @app.get("/camera.mjpg")

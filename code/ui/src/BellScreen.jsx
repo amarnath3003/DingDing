@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useScanner } from './useScanner.js'
 import { useListener } from './useListener.js'
 import {
-  Check, ChevronRight, ConciergeBell, Delete, Ellipsis, Eye, HeartHandshake, Keyboard, Lamp, Laugh, LifeBuoy,
+  Check, ChevronRight, ConciergeBell, Delete, Ellipsis, Eye, HeartHandshake, History, Keyboard, Lamp, Laugh, LifeBuoy,
   MessageSquare, Mic, MicOff, Moon, RotateCcw, Send, Shuffle, Space, Sparkles, Tv, Undo2, Volume2, X,
 } from 'lucide-react'
 import Sidebar from './Sidebar.jsx'
@@ -624,6 +624,11 @@ function MainView({ root, scanner, opt, deck, status }) {
                   <span className="does">
                     {n.card.device === 'tv' ? <Tv size={15} /> : <Lamp size={15} />}
                     {n.card.device_on ? 'Turns on' : 'Turns off'}
+                  </span>
+                )}
+                {n.card?.learned && (
+                  <span className="learned" title={n.card.learned.why}>
+                    <History size={15} />Learned{n.card.learned.times > 1 ? ` · ${n.card.learned.times}×` : ''}
                   </span>
                 )}
               </>

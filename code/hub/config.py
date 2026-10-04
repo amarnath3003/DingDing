@@ -74,6 +74,10 @@ FACE_MODEL_URL = (
 CHECKIN_AFTER_S = float(_env("CHECKIN_AFTER_S", "5"))      # vitals critical this long -> "Are you OK?"
 CHECKIN_TIMEOUT_S = float(_env("CHECKIN_TIMEOUT_S", "20"))  # no answer -> escalate to Help
 
+# --- Learning from picks (hub/memory.py) ----------------------------------------
+LEARNING_ENABLED = _bool("LEARNING", True)
+MEMORY_PATH = Path(_env("MEMORY_PATH", str(CODE_DIR / "hub" / "learned" / "memory.json")))  # stays on this machine
+
 PROFILE_PATH = CODE_DIR / "hub" / "profile.json"
 LOG_DIR = CODE_DIR / "logs"
 UI_DIST = CODE_DIR / "ui" / "dist"

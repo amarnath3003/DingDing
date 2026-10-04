@@ -103,6 +103,9 @@ HOW TO READ THE MOMENT (write this in "read" before the cards)
    already said; offer the natural next thing.
 4. context.rejected: {name} scanned past these without choosing. Don't offer them or close rewordings; think about what
    ELSE they could want.
+5. context.learned: what {name} actually chose before in moments like this one, strongest first ("when" says why it
+   matches). These are {name}'s own words and habits: when one fits now, offer it word for word, in the first two cards.
+   Skip any that don't fit the moment, and never let them crowd out a real answer to what was just asked.
 
 WRITING CARDS
 - Each card is the exact sentence {name} says, first person, in their voice. Adult, direct, dry humour where it fits.
@@ -353,8 +356,8 @@ class Brain:
         comps = [c[0].upper() + c[1:] for c in comps if _keeps_draft(draft, c)]
         return {"next_words": _dedupe(words)[:5], "completions": _dedupe(comps)[:3]}
 
-    def local_keyboard(self, draft: str) -> dict:
-        return local_keyboard(draft, self.profile)
+    def local_keyboard(self, draft: str, own: Optional[List[str]] = None, own_words: Optional[List[str]] = None) -> dict:
+        return local_keyboard(draft, self.profile, own, own_words)
 
 
 # --- local word prediction ------------------------------------------------------
@@ -492,8 +495,10 @@ def kb_letters(draft: str, ai: dict, profile: dict) -> List[str]:
     return rank_letters(partial, prev, profile, hints)
 
 
-def local_keyboard(draft: str, profile: dict) -> dict:
-    vocab = _vocab(profile)
+def local_keyboard(draft: str, profile: dict, own: Optional[List[str]] = None,
+                   own_words: Optional[List[str]] = None) -> dict:
+    """`own` / `own_words`: sentences the user has said and words they have spelled (learned), tried first."""
+    vocab = _dedupe(list(own_words or []) + _vocab(profile)) if own_words else _vocab(profile)
     words = re.split(r"[\s.?!,]+", draft.lower().strip())
     words = [w for w in words if w]
     partial = _partial(draft).lower()
@@ -508,7 +513,7 @@ def local_keyboard(draft: str, profile: dict) -> dict:
     next_words = _dedupe(next_words)[:5]
 
     book = profile.get("phrasebook", {})
-    sentences = [s for group in book.values() for s in group]
+    sentences = _dedupe(list(own or []) + [s for group in book.values() for s in group])
     completions = [s for s in sentences if draft.strip() and _keeps_draft(draft, s)
                    and _norm(s) != _norm(draft)][:3]
 

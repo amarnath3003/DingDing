@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  ConciergeBell, HeartPulse, Home, Lamp, LifeBuoy, MessageSquare, Mic, ScanFace, Sparkles, SlidersHorizontal, Tv, Volume2,
+  ConciergeBell, HeartPulse, Home, Lamp, LifeBuoy, MessageSquare, Mic, ScanFace, Sparkles, SlidersHorizontal, Sprout, Tv, Volume2,
 } from 'lucide-react'
 
 // Operator & simulation panel (open at /#/sim in a second window). For the team only:
@@ -40,7 +40,8 @@ export default function SimPanel({ hub }) {
     cur.has(name) ? cur.delete(name) : cur.add(name)
     send({ type: 'present', names: people.filter((p) => cur.has(p)) })
   }
-  const { health, env, face, devices, room, alert, deck, llm, settings, scenarios, bell } = state
+  const { health, env, face, devices, room, alert, deck, llm, settings, scenarios, bell, memory } = state
+  const curve = memory?.curve
   const theme = settings?.theme || 'auto'
   const on = (cond) => `btn ${cond ? 'is-on' : ''}`
 
@@ -225,6 +226,42 @@ export default function SimPanel({ hub }) {
           </div>
         </section>
 
+        <section className="panel">
+          <h2><Sprout size={20} /> Learning</h2>
+          {!memory?.enabled ? <p className="muted">Learning is switched off (LEARNING=0).</p> : (
+            <>
+              <p>Every pick is remembered with its moment: the time, who was here, what was just asked and the face.
+                In a moment like it, the pick comes back first, marked <em>Learned</em>.</p>
+              <div className="learn-curve">
+                <div><strong>{memory.phrases}</strong>phrases learned</div>
+                <div><strong>{memory.picks}</strong>picks so far</div>
+                {curve && (
+                  <div>
+                    <strong className={curve.recent_rank < curve.early_rank ? 'better' : ''}>{curve.early_rank} → {curve.recent_rank}</strong>
+                    position of the chosen card (first {curve.window} picks → last {curve.window})
+                  </div>
+                )}
+              </div>
+              {!curve && <p className="muted">After 10 card picks, this shows whether the right card is arriving sooner.</p>}
+              {memory.top?.length > 0 && (
+                <>
+                  <h3>Most used</h3>
+                  <ol className="deck-list">
+                    {memory.top.map((t) => <li key={t.text}>{t.text}<span className="meta">{t.why}</span></li>)}
+                  </ol>
+                </>
+              )}
+              <div className="btns">
+                <a className="btn" href="/api/memory" target="_blank" rel="noreferrer">What it would recall now</a>
+                <button className="btn" disabled={!memory.phrases}
+                  onClick={() => window.confirm('Forget everything Ding.AI has learned? This cannot be undone.') && send({ type: 'memory_reset' })}>
+                  Forget everything
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+
         <section className="panel wide">
           <h2><Sparkles size={20} /> Suggestions</h2>
           <p className="muted">
@@ -235,6 +272,7 @@ export default function SimPanel({ hub }) {
           <ol className="deck-list">
             {(deck?.cards || []).map((c) => (
               <li key={c.id}>{c.text}
+                {c.learned && <span className="learned-why">Learned: {c.learned.why}</span>}
                 <span className="meta">{c.kind.replaceAll('_', ' ')}{c.device !== 'none' ? `, turns ${c.device} ${c.device_on ? 'on' : 'off'}` : ''}, tone {c.tone}, p {c.p}</span>
               </li>
             ))}

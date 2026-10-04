@@ -68,6 +68,9 @@ The user's words use OpenAI TTS (`gpt-4o-mini-tts`), disk-cached and pre-fetched
 ### 🚨 A safety net
 Vitals critical for 5 s → *"Are you OK?"*. No answer in 20 s → automatic Help. The caregiver presses *"I'm coming"* and Ding says so out loud.
 
+### 🌱 Learns the longer it's used
+Every pick is remembered with its moment: the time, who was there, what was just asked, the face. Ask again, even in different words, and his last answer comes back **first**, marked *Learned*. Undo forgets a pick, scanned-past habits fade, and the offline phrasebook and keyboard learn too.
+
 </td>
 </tr>
 </table>
@@ -157,7 +160,7 @@ flowchart LR
 | Heart rate, SpO₂, BP, temperature | *Simulated, with scenarios* |
 | Room temperature, humidity, light, noise, CO₂ | *Simulated, with scenarios* |
 | Light + TV + SOS alarm | **Real** with the room ESP32 over Wi-Fi ([`room_esp32/`](room_esp32)), otherwise *simulated* |
-| Learning from picks | *Next iteration* (events are already logged) |
+| Learning from picks | **Real**: on this machine only ([`code/hub/memory.py`](code/hub/memory.py)) |
 
 Everything simulated is labelled **Simulated** on screen. The persona (Ravi, 54, retired headmaster) is illustrative only.
 

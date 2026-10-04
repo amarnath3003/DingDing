@@ -22,7 +22,7 @@ What's real and what's mocked in this iteration:
 | Suggestions + keyboard prediction | **Real** OpenAI calls (`OPENAI_MODEL`; `gpt-5-mini` recommended, see below), local phrasebook + 20k-word list fallback |
 | User's voice | **Real** OpenAI TTS (`gpt-4o-mini-tts`, cheapest), disk-cached and pre-fetched; local macOS voice fallback |
 | Hearing people | **Microphone toggle, OFF by default** (top bar on the Bell Screen, sim panel, or More › mic). When on: browser VAD → `gpt-4o-mini-transcribe` (cheapest). You can always type what people say in the sim panel instead. |
-| Learning from picks | Not yet (next iteration). Events are already logged to `code/logs/`. |
+| Learning from picks | Real, local only: `hub/memory.py`, stored in `hub/learned/memory.json` (git-ignored). `LEARNING=0` switches it off. |
 
 ## Run
 
@@ -71,6 +71,15 @@ On macOS the first run asks for camera permission for your terminal app. If it's
 
 `GET /api/context` shows exactly what the model sees. The pieces that matter most:
 `waiting_for_answer` (someone spoke and the user hasn't replied: all 4 cards answer it), `conversation` (both sides, oldest first), `rejected` (scanned past or replaced), `due_now` (routines with a clock time within 30 min), plain-language room readings (`32.4°C (hot)`), only the vitals that are off, and who is present with their relation. The model writes a short `read` of the moment before its cards (shown in the sim panel), and the hub then drops cards that parrot the question back, repeat what the user just said, ask for someone who is already in the room, or were rejected, topping up from the phrasebook if needed.
+### Learning from picks
+
+`hub/memory.py` remembers every pick (a card, a keyboard message, a phrase from a menu) with its moment: the clock (simulated if shifted), who was present, the line it answered, the face label. In a later moment, each past use counts more when the time is within 45 min, the same people are here, the face matches, and above all when the line being answered is similar (word overlap, so rewordings still match). Uses lose half their weight after 30 days.
+- **To the AI:** the top matches go in `context.learned` (`text`, `times`, `when`), and the prompt asks for them word for word when they fit.
+- **On screen:** a match strong enough (one answer to the same question, or a habit used twice) is placed first even if the AI left it out, at most 2 per deck. Never above an alert or critical vitals. Cards the user chose before carry a *Learned* chip.
+- **Offline:** with the phrasebook, anything learned that fits comes first, and the keyboard completes the user's own past messages and spelled words.
+- **Forgetting:** undo removes the pick; every time a learned card is scanned past (or "Other ideas" replaces it) it keeps 70% of its weight. The operator panel shows the learning curve (average position of the chosen card, early picks vs recent) and can wipe it all.
+- "Clear conversation" in the sim panel starts a new scene (both sides of the conversation, and what was scanned past), so a demo can ask the same question twice: the second time the user's answer is card 1.
+
 `code/tests/guess_eval.py` runs 10 realistic moments through any model (`python -m tests.guess_eval gpt-5-mini gpt-5-nano`). On it, `gpt-5-nano` stays weak (repeats the question, asks the user questions, misses distress); `gpt-5-mini` answers what was asked, in the user's voice, at the same ~2.3 s. That's why `gpt-5-mini` is recommended (≈ $0.001 per deck).
 - Scanning pauses when the camera sees eyes closed or the face turned away for ~2 s (or while someone is talking, with the mic on), and slows down when the face looks `tired`. When someone speaks, the screen wakes with replies (unless the user chose Rest).
 - At night the screen dims.
@@ -153,9 +162,9 @@ Cards also carry `tone`: `neutral | warm | playful | firm | urgent | sad` (passe
 | `stop_speaking` | | |
 | `undo` | | undo the last choice (within `undo_window_s`) |
 | `settings` | `scan_ms`, `pause_on_attention`, `mic_on`, `tts_voice` | |
-| sim only | `bell_sim{gesture}` `heard{speaker,text}` `clear_heard` `present{names}` `sim_health{scenario}` `sim_env{scenario}` `sim_time{hhmm}` `face_override{label}` `face_calibrate` `caregiver_ack{name}` | |
+| sim only | `bell_sim{gesture}` `heard{speaker,text}` `clear_heard` `present{names}` `sim_health{scenario}` `sim_env{scenario}` `sim_time{hhmm}` `face_override{label}` `face_calibrate` `caregiver_ack{name}` `memory_reset` | |
 
-HTTP: `POST /api/transcribe` (one WAV utterance; ignored unless `mic_on`), `GET /api/state`, `GET /api/context` (exactly what the LLM sees), `GET /camera.mjpg` (local preview).
+HTTP: `POST /api/transcribe` (one WAV utterance; ignored unless `mic_on`), `GET /api/state`, `GET /api/context` (exactly what the LLM sees), `GET /api/memory` (what was learned, and what it would recall now), `GET /camera.mjpg` (local preview).
 
 ## Swapping in the hardware later
 
